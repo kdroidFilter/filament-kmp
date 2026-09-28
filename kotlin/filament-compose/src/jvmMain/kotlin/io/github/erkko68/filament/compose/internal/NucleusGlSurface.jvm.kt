@@ -144,8 +144,8 @@ internal fun NucleusGlFilamentSurface(
         }
     }
 
-    FilamentRenderLoop {
-        if (targets.isEmpty()) return@FilamentRenderLoop
+    FilamentRenderLoop { frameTime ->
+        if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
             val pending = inFlight.value
             if (pending != null && pending.second.wait(Fence.Mode.FLUSH, 0) == Fence.FenceStatus.TIMEOUT_EXPIRED) {

@@ -69,6 +69,14 @@ if [[ "$TARGET" == mingwArm64 ]]; then
     sed -i 's/if(DEFINED ENV{MSYSTEM})/if(FALSE)/' "$CACHE_DIR/CMakeLists.txt"
 fi
 
+if [[ "$TARGET" == linux* ]]; then
+    trap 'git -C "$CACHE_DIR" checkout --quiet -- filament/backend/CMakeLists.txt' EXIT
+    # The EGL build compiles the GL backend against GLES but only links EGL, so Filament's own
+    # tools (matc, …) fail to link; add GLESv2 next to it.
+    sed -i 's/target_link_libraries(${TARGET} PUBLIC EGL)/target_link_libraries(${TARGET} PUBLIC EGL GLESv2)/' \
+        "$CACHE_DIR/filament/backend/CMakeLists.txt"
+fi
+
 cmake -S "$CACHE_DIR" -B "$BUILD_DIR" "${ARGS[@]}"
 # An explicit job count: a bare --parallel means an unbounded `make -j` with Makefiles, which
 # exhausts CI runners' memory within minutes.

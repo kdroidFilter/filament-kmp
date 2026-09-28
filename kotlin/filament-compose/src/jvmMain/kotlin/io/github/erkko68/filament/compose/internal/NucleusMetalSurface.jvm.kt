@@ -98,8 +98,8 @@ internal fun NucleusMetalFilamentSurface(
         }
     }
 
-    FilamentRenderLoop {
-        if (targets.isEmpty()) return@FilamentRenderLoop
+    FilamentRenderLoop { frameTime ->
+        if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
             val pending = inFlight.value
             // GPU still busy with the previous frame: skip rather than stall the UI thread.

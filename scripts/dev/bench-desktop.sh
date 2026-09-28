@@ -4,9 +4,12 @@
 #   nucleus-gpu        samples/nucleusApp, Filament renders on the Nucleus window's GPU
 #   nucleus-offscreen  samples/nucleusApp with -Dfilament.compose.nucleus=false (readback path)
 #   compose-awt        samples/desktopApp, stock Compose Desktop window (readback path)
+# Append @N to a mode to cap its rendering at N fps (e.g. nucleus-gpu@30), to compare CPU at an
+# equal delivered frame rate.
 #
 # Usage: scripts/dev/bench-desktop.sh [scene=animation] [seconds=20] [mode…]
-# Prints per mode: delivered frames/s, render-callback CPU ms/s, whole-process CPU %.
+# Env WARMUP (default 20 s) is skipped before sampling: JIT compilation dominates it.
+# Prints per mode: delivered frames/s, whole-process CPU (% of one core) and CPU ms per frame.
 set -euo pipefail
 
 SCENE="${1:-animation}"
@@ -20,21 +23,23 @@ mkdir -p "$OUT"
 
 run_mode() {
     local mode=$1 app props="-Dfilament.compose.stats=true"
-    case "$mode" in
+    [[ "$mode" == *@* ]] && props+=" -Dfilament.compose.maxFps=${mode#*@}"
+    case "${mode%@*}" in
         nucleus-gpu) app=nucleusApp ;;
         nucleus-offscreen) app=nucleusApp; props+=" -Dfilament.compose.nucleus=false" ;;
         compose-awt) app=desktopApp ;;
         *) echo "unknown mode $mode" >&2; exit 1 ;;
     esac
-    (cd "$ROOT/samples" && FILAMENT_BENCH="$SCENE $SECONDS_" JAVA_TOOL_OPTIONS="$props" \
+    (cd "$ROOT/samples" && FILAMENT_BENCH="$SCENE $SECONDS_ ${WARMUP:-20}" JAVA_TOOL_OPTIONS="$props" \
         ./gradlew -q ":$app:run" --no-configuration-cache) > "$OUT/$mode.log" 2>&1 || true
-    # Drop the warmup seconds (the process starts sampling after 3 s) and the partial last line.
-    awk -v mode="$mode" '
-        /filament-stats/ { n++; if (n > 4) { split($2, f, "="); split($3, c, "="); fr += f[2]; cpu += c[2]; k++ } }
-        /bench-result/ { split($2, p, "="); proc = p[2] }
+    # Frames: only the seconds the process CPU was sampled over (after the warmup).
+    awk -v mode="$mode" -v skip="${WARMUP:-20}" '
+        /filament-stats/ { n++; if (n > skip + 1) { split($2, f, "="); fr += f[2]; k++ } }
+        /bench-result/ { split($2, p, "="); proc = p[2]; gsub(",", ".", proc) }
         END {
-            if (k == 0) { printf "%-18s no samples (see build/bench/%s.log)\n", mode, mode; exit }
-            printf "%-18s %6.1f fps  %7.2f ms/s render CPU  %6s%% process CPU\n", mode, fr / k, cpu / k, proc
+            if (k == 0 || fr == 0) { printf "%-20s no samples (see build/bench/%s.log)\n", mode, mode; exit }
+            fps = fr / k
+            printf "%-20s %6.1f fps  %6.1f%% CPU  %6.2f ms CPU/frame\n", mode, fps, proc, proc * 10 / fps
         }' "$OUT/$mode.log"
 }
 

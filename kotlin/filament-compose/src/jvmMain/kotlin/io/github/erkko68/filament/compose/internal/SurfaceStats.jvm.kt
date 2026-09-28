@@ -34,6 +34,20 @@ internal object SurfaceStats {
         if (enabled && reported.add(kind)) println("filament-surface=$kind")
     }
 
+    // `-Dfilament.compose.maxFps=N` caps rendering, to compare CPU at an equal frame rate.
+    // ponytail: one global clock, so it caps the sum of all views; per-surface if benches need more.
+    private val minFrameNanos = System.getProperty("filament.compose.maxFps")?.toLongOrNull()?.let { 1_000_000_000L / it } ?: 0L
+    private var lastFrameNanos = 0L
+
+    /** False when rendering this frame would exceed the cap. Composition thread only. */
+    fun frameDue(frameTimeNanos: Long): Boolean {
+        if (minFrameNanos == 0L) return true
+        // 2 ms of slack so a cap equal to a divisor of the display rate lands on every Nth vsync.
+        if (frameTimeNanos - lastFrameNanos < minFrameNanos - 2_000_000L) return false
+        lastFrameNanos = frameTimeNanos
+        return true
+    }
+
     fun frameDelivered() {
         if (enabled) frames.incrementAndGet()
     }

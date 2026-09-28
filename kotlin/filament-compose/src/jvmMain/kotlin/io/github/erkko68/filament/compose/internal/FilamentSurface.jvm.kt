@@ -255,6 +255,7 @@ internal actual fun FilamentSurface(
 
     FilamentRenderLoop(renderingEnabled) { frameTime ->
         val s = surface ?: return@FilamentRenderLoop
+        if (!SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
             // Adopt before rendering so the freed slot can take this frame's readback.
             s.readback.adoptPublished(display.slot)?.let { slot ->

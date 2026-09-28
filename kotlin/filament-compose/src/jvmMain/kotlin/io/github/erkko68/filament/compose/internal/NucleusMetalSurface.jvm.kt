@@ -69,6 +69,7 @@ internal fun NucleusMetalFilamentSurface(
     renderer: Renderer,
     view: View,
     metalDevice: Long,
+    renderingEnabled: Boolean,
     onResize: (aspect: Double) -> Unit,
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
@@ -98,7 +99,7 @@ internal fun NucleusMetalFilamentSurface(
         }
     }
 
-    FilamentRenderLoop { frameTime ->
+    FilamentRenderLoop(renderingEnabled) { frameTime ->
         if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
             val pending = inFlight.value

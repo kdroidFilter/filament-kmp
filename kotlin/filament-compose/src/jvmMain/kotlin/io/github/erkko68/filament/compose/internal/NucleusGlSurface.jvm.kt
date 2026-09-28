@@ -106,6 +106,7 @@ internal fun NucleusGlFilamentSurface(
     renderer: Renderer,
     view: View,
     host: NucleusGlHost,
+    renderingEnabled: Boolean,
     onResize: (aspect: Double) -> Unit,
 ) {
     var pxSize by remember { mutableStateOf(IntSize.Zero) }
@@ -144,7 +145,7 @@ internal fun NucleusGlFilamentSurface(
         }
     }
 
-    FilamentRenderLoop { frameTime ->
+    FilamentRenderLoop(renderingEnabled) { frameTime ->
         if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
             val pending = inFlight.value

@@ -174,13 +174,13 @@ internal actual fun FilamentSurface(
     if (nucleusGpuEnabled) {
         val glHost = NucleusGl.hostOf(engine)
         if (glHost != null) {
-            NucleusGlFilamentSurface(modifier, engine, renderer, view, glHost, onResize)
+            NucleusGlFilamentSurface(modifier, engine, renderer, view, glHost, renderingEnabled, onResize)
             return
         }
         if (engine.backend == Engine.Backend.METAL) {
             val metalDevice = rememberNucleusMetalDevice()
             if (metalDevice != 0L) {
-                NucleusMetalFilamentSurface(modifier, engine, renderer, view, metalDevice, onResize)
+                NucleusMetalFilamentSurface(modifier, engine, renderer, view, metalDevice, renderingEnabled, onResize)
                 return
             }
         }

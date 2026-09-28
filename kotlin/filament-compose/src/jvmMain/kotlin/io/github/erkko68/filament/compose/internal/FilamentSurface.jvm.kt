@@ -170,6 +170,15 @@ internal actual fun FilamentSurface(
     renderingEnabled: Boolean,
     onResize: (aspect: Double) -> Unit,
 ) {
+    // Inside a Nucleus (Tao) Metal window, render on the window's GPU instead of reading back.
+    if (nucleusGpuEnabled && engine.backend == Engine.Backend.METAL) {
+        val metalDevice = rememberNucleusMetalDevice()
+        if (metalDevice != 0L) {
+            NucleusMetalFilamentSurface(modifier, engine, renderer, view, metalDevice, onResize)
+            return
+        }
+    }
+
     var layoutSize by remember { mutableStateOf(IntSize.Zero) }
     var textureSize by remember { mutableStateOf(IntSize.Zero) }
     var displayedImage by remember { mutableStateOf<Image?>(null) }
@@ -239,16 +248,19 @@ internal actual fun FilamentSurface(
 
     FilamentRenderLoop(renderingEnabled) { frameTime ->
         val s = surface ?: return@FilamentRenderLoop
-        // Adopt before rendering so the freed slot can take this frame's readback.
-        s.readback.adoptPublished(display.slot)?.let { slot ->
-            display.slot = slot
-            displayedImage = slot.image
-        }
-        if (renderer.beginFrame(s.swapChain, frameTime)) {
-            renderer.render(view)
-            // Swapchain readback must happen inside the frame (after render, before endFrame).
-            s.readback.issueReadPixels(renderer)
-            renderer.endFrame()
+        SurfaceStats.measure {
+            // Adopt before rendering so the freed slot can take this frame's readback.
+            s.readback.adoptPublished(display.slot)?.let { slot ->
+                display.slot = slot
+                displayedImage = slot.image
+                SurfaceStats.frameDelivered()
+            }
+            if (renderer.beginFrame(s.swapChain, frameTime)) {
+                renderer.render(view)
+                // Swapchain readback must happen inside the frame (after render, before endFrame).
+                s.readback.issueReadPixels(renderer)
+                renderer.endFrame()
+            }
         }
     }
 

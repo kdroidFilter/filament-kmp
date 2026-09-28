@@ -12,8 +12,10 @@ kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
 material3 = "1.9.0"
 navigation = "2.9.2"
+nucleus = "2.6.0-dev-202609271939"
 
 [libraries]
+nucleus-application = { module = "dev.nucleusframework:nucleus.nucleus-application", version.ref = "nucleus" }
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
 filament = { module = "io.github.erkko68.filament:filament", version.ref = "filament" }
 filament-compose = { module = "io.github.erkko68.filament:filament-compose", version.ref = "filament" }

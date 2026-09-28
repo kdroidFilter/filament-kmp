@@ -104,6 +104,8 @@ kotlin {
         }
         jvmMain.dependencies {
             implementation(compose.desktop.currentOs)
+            // Optional: the GPU surface kicks in only when the app itself runs on Nucleus.
+            compileOnly(libs.nucleus.decoratedWindowTao)
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

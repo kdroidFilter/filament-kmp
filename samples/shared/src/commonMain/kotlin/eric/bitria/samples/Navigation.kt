@@ -15,4 +15,12 @@ sealed class Screen {
     data object HDREnvironment : Screen()
     data object Transparent : Screen()
     data object RuntimeMaterial : Screen()
+
+    companion object {
+        /** Looks a destination up by its name, case-insensitively (e.g. `animation`). */
+        fun byName(name: String): Screen? =
+            listOf(Home, Duck, Primitives, Lighting, Picking, Solar, Animation, SplitView, Texture,
+                KTXEnvironment, HDREnvironment, Transparent, RuntimeMaterial)
+                .firstOrNull { it.toString().equals(name, ignoreCase = true) }
+    }
 }

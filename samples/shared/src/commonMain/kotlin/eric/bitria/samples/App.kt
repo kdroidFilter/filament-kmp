@@ -20,9 +20,9 @@ import eric.bitria.samples.scenes.TransparentScene
 import eric.bitria.samples.scenes.RuntimeMaterialScene
 
 @Composable
-fun App() {
+fun App(startScreen: Screen = Screen.Home) {
     MaterialTheme {
-        var screen: Screen by remember { mutableStateOf(Screen.Home) }
+        var screen: Screen by remember { mutableStateOf(startScreen) }
         when (screen) {
             Screen.Home       -> HomeScreen(onNavigate = { screen = it })
             Screen.Duck       -> DuckScene(onBack = { screen = Screen.Home })

@@ -58,7 +58,12 @@ patch_sources() {
             # when unset. The guard targets MSYS toolchains; this build uses MSVC, so drop it.
             sed -i 's/if(DEFINED ENV{MSYSTEM})/if(FALSE)/' "$CACHE_DIR/CMakeLists.txt" ;;
         linux*)
-            trap 'git -C "$CACHE_DIR" checkout --quiet -- filament/backend/CMakeLists.txt' EXIT
+            trap 'git -C "$CACHE_DIR" checkout --quiet -- CMakeLists.txt filament/backend/CMakeLists.txt' EXIT
+            # The GL backend runs on GLES here, which loads materials' mobile shaders, while a
+            # Linux build only compiles desktop ones (FILAMENT_LINUX_IS_MOBILE would, but it also
+            # drops the host tools the build needs). Compile both, so Vulkan keeps desktop too.
+            sed -i 's/set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p ${MATC_TARGET} ${MATC_OPT_FLAGS})/set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p all ${MATC_OPT_FLAGS})/' \
+                "$CACHE_DIR/CMakeLists.txt"
             # The EGL build compiles the GL backend against GLES but only links EGL, so Filament's
             # own tools (matc, …) fail to link; add GLESv2 next to it.
             sed -i 's/target_link_libraries(${TARGET} PUBLIC EGL)/target_link_libraries(${TARGET} PUBLIC EGL GLESv2)/' \

@@ -84,6 +84,7 @@ external fun FilaEngineBuilder_create(): Long
 external fun FilaEngineBuilder_destroy(builder: Long)
 external fun FilaEngineBuilder_feature(builder: Long, name: String?, value: Boolean)
 external fun FilaEngineBuilder_featureLevel(builder: Long, featureLevel: Int)
+external fun FilaEngineBuilder_gpuShare(builder: Long, share: Long)
 external fun FilaEngineBuilder_paused(builder: Long, paused: Boolean)
 external fun FilaEngineBuilder_sharedContext(builder: Long, sharedContext: Long)
 external fun FilaEngine_compile(engine: Long, priority: Int, material: Long, view: Long, shadowReceiver: Int, skinning: Int, callback: Long, userData: Long)
@@ -169,6 +170,14 @@ external fun FilaEntityManager_getMaxEntityCount(em: Long): Long
 external fun FilaEntityManager_isAlive(em: Long, entity: Int): Boolean
 external fun FilaFence_wait(fence: Long, mode: Int, timeoutNanoSeconds: Long): Int
 external fun FilaFence_waitAndDestroy(fence: Long, mode: Int): Int
+external fun FilaGpuShare_create(hostEglDisplay: Long): Long
+external fun FilaGpuShare_destroy(share: Long)
+external fun FilaGpuTexture_create(share: Long, width: Int, height: Int): Long
+external fun FilaGpuTexture_destroy(texture: Long)
+external fun FilaGpuTexture_glName(texture: Long): Int
+external fun FilaGpuTexture_handle(texture: Long): Long
+external fun FilaGpuTexture_lock(texture: Long): Boolean
+external fun FilaGpuTexture_unlock(texture: Long): Boolean
 external fun FilaIndexBufferBuilder_bufferType(builder: Long, indexType: Int)
 external fun FilaIndexBufferBuilder_build(builder: Long, engine: Long): Long
 external fun FilaIndexBufferBuilder_create(): Long

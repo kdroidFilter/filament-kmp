@@ -70,7 +70,9 @@ if [[ "$TARGET" == mingwArm64 ]]; then
 fi
 
 cmake -S "$CACHE_DIR" -B "$BUILD_DIR" "${ARGS[@]}"
-cmake --build "$BUILD_DIR" --target install --config Release --parallel
+# An explicit job count: a bare --parallel means an unbounded `make -j` with Makefiles, which
+# exhausts CI runners' memory within minutes.
+cmake --build "$BUILD_DIR" --target install --config Release --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
 
 rm -rf "$OUT_DIR" "$INCLUDE_DIR"
 mkdir -p "$OUT_DIR" "$INCLUDE_DIR/gltfio/materials"

@@ -1,7 +1,7 @@
 # `:android` — Android runtime for `:jni`
 
 Builds `libfilament-c.so` for arm64-v8a, armeabi-v7a, x86_64 and x86 and ships it with the
-[`:jni`](../jni/README.md) bindings as **`io.github.erkko68.filament:filament-jni-android`** (AAR). Every
+[`:jni`](../jni/README.md) bindings as **`dev.nucleusframework.filament:filament-jni-android`** (AAR). Every
 `:kotlin:*` module's Android target pulls it in.
 
 - **Native build:** `buildJniLibs` runs `c/CMakeLists.txt` (`FILAMENT_PLATFORM=android`, target

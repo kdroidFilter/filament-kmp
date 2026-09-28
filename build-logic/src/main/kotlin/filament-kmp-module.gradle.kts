@@ -13,7 +13,7 @@ plugins {
 }
 
 // ── Project coordinates (previously in root allprojects {}) ───────────────────
-group   = project.findProperty("projectGroup") as? String ?: "io.github.erkko68.filament"
+group   = project.findProperty("projectGroup") as? String ?: "dev.nucleusframework.filament"
 version = project.findProperty("libVersion")   as? String ?: "0.1.0-SNAPSHOT"
 
 val libs = the<org.gradle.api.artifacts.VersionCatalogsExtension>().named("libs")

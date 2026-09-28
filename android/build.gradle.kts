@@ -6,7 +6,7 @@ plugins {
     id("filament-publish")
 }
 
-group = project.findProperty("projectGroup") as? String ?: "io.github.erkko68.filament"
+group = project.findProperty("projectGroup") as? String ?: "dev.nucleusframework.filament"
 version = project.findProperty("libVersion") as? String ?: "0.1.0-SNAPSHOT"
 
 // Android native runtime for :jni: libfilament-c.so per ABI (the Fila* C API + jni/'s forwarders + the

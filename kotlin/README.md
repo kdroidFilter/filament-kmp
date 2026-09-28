@@ -4,11 +4,11 @@ This directory contains the Kotlin Multiplatform modules published to Maven Cent
 
 | Module | Artifact | Description |
 | :--- | :--- | :--- |
-| [`filament/`](filament) | `io.github.erkko68.filament:filament` | Core renderer wrapper. |
-| [`filament-compose/`](filament-compose) | `io.github.erkko68.filament:filament-compose` | Compose Multiplatform integration. |
-| [`gltfio/`](gltfio) | `io.github.erkko68.filament:gltfio` | glTF / GLB asset loading. |
-| [`filamat/`](filamat) | `io.github.erkko68.filament:filamat` | Runtime material compilation. |
-| [`filament-utils/`](filament-utils) | `io.github.erkko68.filament:filament-utils` | Math, manipulators, HDR/KTX loaders. |
+| [`filament/`](filament) | `dev.nucleusframework.filament:filament` | Core renderer wrapper. |
+| [`filament-compose/`](filament-compose) | `dev.nucleusframework.filament:filament-compose` | Compose Multiplatform integration. |
+| [`gltfio/`](gltfio) | `dev.nucleusframework.filament:gltfio` | glTF / GLB asset loading. |
+| [`filamat/`](filamat) | `dev.nucleusframework.filament:filamat` | Runtime material compilation. |
+| [`filament-utils/`](filament-utils) | `dev.nucleusframework.filament:filament-utils` | Math, manipulators, HDR/KTX loaders. |
 
 See [`docs/modules.md`](../docs/modules.md) for the full coordinates list, dependency graph, and per-module usage notes.
 

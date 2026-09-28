@@ -5,10 +5,10 @@ Filament KMP is split into five Kotlin Multiplatform modules, mirroring Filament
 Only **`filament-compose`** involves Compose. The other four are plain Kotlin bindings over the Filament API and work in any Kotlin code — a game loop, a headless renderer, an existing `SurfaceView` app. See **[Using the Engine Without Compose](engine.md)**.
 
 > [!NOTE]
-> All Kotlin modules are published under the group **`io.github.erkko68.filament`**.
-> The JVM/Desktop native runtime — a single Project Panama (FFM) module — is published as **`io.github.erkko68.filament-ffm:filament-ffm`** and pulled in transitively, so you never add it by hand.
+> All Kotlin modules are published under the group **`dev.nucleusframework.filament`**.
+> The JVM/Desktop native runtime — a single Project Panama (FFM) module — is published as **`dev.nucleusframework.filament-ffm:filament-ffm`** and pulled in transitively, so you never add it by hand.
 >
-> Browse on Maven Central: [`io.github.erkko68.filament`](https://central.sonatype.com/namespace/io.github.erkko68.filament) · [`io.github.erkko68.filament-ffm`](https://central.sonatype.com/namespace/io.github.erkko68.filament-ffm)
+> Browse on Maven Central: [`dev.nucleusframework.filament`](https://central.sonatype.com/namespace/dev.nucleusframework.filament) · [`dev.nucleusframework.filament-ffm`](https://central.sonatype.com/namespace/io.github.erkko68.filament-ffm)
 > Direct repository: [`repo1.maven.org/.../io/github/erkko68/filament/`](https://repo1.maven.org/maven2/io/github/erkko68/filament/)
 
 ## Quick picker
@@ -32,8 +32,8 @@ What differs is the extra platform setup around it:
 
 | Target | Kotlin dependency | Also required |
 | :--- | :--- | :--- |
-| **Android** | `io.github.erkko68.filament:filament` | Nothing. The native runtime `io.github.erkko68.filament:filament-jni-android` (AAR, all four ABIs) comes in transitively. `compileSdk 37`, `minSdk 24`. |
-| **JVM / Desktop** (macOS, Windows, Linux) | same | **JDK 22+** at build and run time. The native runtime `io.github.erkko68.filament-ffm:filament-ffm` is transitive — nothing to add by hand. See [narrowing the natives](#what-gradle-actually-downloads). |
+| **Android** | `dev.nucleusframework.filament:filament` | Nothing. The native runtime `dev.nucleusframework.filament:filament-jni-android` (AAR, all four ABIs) comes in transitively. `compileSdk 37`, `minSdk 24`. |
+| **JVM / Desktop** (macOS, Windows, Linux) | same | **JDK 22+** at build and run time. The native runtime `dev.nucleusframework.filament-ffm:filament-ffm` is transitive — nothing to add by hand. See [narrowing the natives](#what-gradle-actually-downloads). |
 | **iOS** (`iosArm64`, `iosSimulatorArm64`) | same | Nothing. The Filament static libraries are inside the klib. Link your framework as `isStatic = true`. |
 | **Web** (`js`, `wasmJs`) | same | `filament-kmp.js` + `.wasm` (and `filamat-kmp.*` for `MaterialBuilder`) from the GitHub release, copied into `src/webMain/resources/` — they are **not** pulled in by Gradle. See [Platform Notes](platform-notes.md#filament-kmpjs-and-wasm-bundle). |
 
@@ -48,7 +48,7 @@ declares the dependency in `dependencies { }` exactly like any other library:
 ```kotlin
 // A plain JVM project — no KMP plugin, no Compose.
 dependencies {
-    implementation("io.github.erkko68.filament:filament:0.6.0")
+    implementation("dev.nucleusframework.filament:filament:0.6.1")
 }
 ```
 
@@ -76,7 +76,7 @@ configurations.matching { it.isCanBeResolved }.configureEach {
 
 // Option B — depend on one platform runtime directly; it excludes its siblings.
 dependencies {
-    implementation("io.github.erkko68.filament-ffm:filament-ffm-runtime-macos-arm64:0.X.0")
+    implementation("dev.nucleusframework.filament-ffm:filament-ffm-runtime-macos-arm64:0.X.0")
 }
 ```
 
@@ -89,7 +89,7 @@ Full details in [`java/README.md`](../java/README.md).
 Compose Multiplatform UI integration. Pulls in `filament` transitively.
 
 ```kotlin
-implementation("io.github.erkko68.filament:filament-compose:0.6.0")
+implementation("dev.nucleusframework.filament:filament-compose:0.6.1")
 ```
 
 Provides `rememberFilamentScene` / `FilamentView` (and the `FilamentSceneView` single-view shortcut), the declarative scene DSL (`Light`, `GltfInstance`, …), value-based `PostProcessing`, hoisted state (`rememberCameraState`, `rememberFilamentViewState`, `rememberSkyboxState`, …), and gesture modifiers (`orbitGestures`, `mapGestures`, `flightGestures`, `pickOnTap`).
@@ -103,7 +103,7 @@ See **[Compose Integration](compose/README.md)** for the full component referenc
 The core renderer. Wraps Filament's `Engine`, `Scene`, `View`, `Renderer`, `Camera`, `Texture`, `Material`, `LightManager`, `TransformManager`, `RenderableManager`, and the rest of the engine surface.
 
 ```kotlin
-implementation("io.github.erkko68.filament:filament:0.6.0")
+implementation("dev.nucleusframework.filament:filament:0.6.1")
 ```
 
 This is the whole engine and it stands on its own — no Compose runtime, no Compose Gradle plugin. Depend on it when you drive the render loop yourself, render into a surface you already own, or render headless; see **[Using the Engine Without Compose](engine.md)**. Compose users get it transitively via `filament-compose` and can reach the raw `Engine` through the `FilamentEffect` escape hatch, so they rarely declare it explicitly.
@@ -117,7 +117,7 @@ Upstream reference: **[Filament Engine](https://google.github.io/filament/Filame
 glTF 2.0 / GLB asset loader. Wraps `AssetLoader`, `FilamentAsset`, `FilamentInstance`, `ResourceLoader`, `Animator`, and `UbershaderProvider`.
 
 ```kotlin
-implementation("io.github.erkko68.filament:gltfio:0.6.0")
+implementation("dev.nucleusframework.filament:gltfio:0.6.1")
 ```
 
 With `filament-compose`, you typically interact with this through `rememberGltfAsset { ... }` and `GltfInstance(...)`. The raw API is available for advanced cases — instancing, material swapping, morph targets.
@@ -131,7 +131,7 @@ Upstream reference: **[gltfio README](https://github.com/google/filament/tree/ma
 Math types, camera manipulators (orbit / map / flight), and HDR / KTX texture loaders.
 
 ```kotlin
-implementation("io.github.erkko68.filament:filament-utils:0.6.0")
+implementation("dev.nucleusframework.filament:filament-utils:0.6.1")
 ```
 
 `filament-compose` builds its `rememberOrbitCameraController`, `rememberMapCameraController`, and `rememberFlightCameraController` on top of this module. Use it directly if you want a manipulator outside the Compose lifecycle.
@@ -143,7 +143,7 @@ implementation("io.github.erkko68.filament:filament-utils:0.6.0")
 Runtime material compilation. Wraps `MaterialBuilder` — the same API used by Filament's `matc` command-line tool, but invoked from Kotlin at runtime.
 
 ```kotlin
-implementation("io.github.erkko68.filament:filamat:0.6.0")
+implementation("dev.nucleusframework.filament:filamat:0.6.1")
 ```
 
 Most apps **don't need this**. The standard workflow is to compile `.mat` source files to `.filamat` binaries at build time with `matc`, ship the `.filamat` as a resource, and load it with `Material.Builder().payload(...)`. Add `filamat` only if you generate material source dynamically at runtime.
@@ -170,6 +170,6 @@ Adding `filament-compose` gives you `filament`. Adding `gltfio` or `filament-uti
 
 ## Versioning
 
-All modules share a single version, currently **`0.6.0`**, tracking Filament **1.77.1** upstream. Always upgrade all `io.github.erkko68.filament:*` artifacts together — mixed versions are not supported.
+All modules share a single version, currently **`0.6.1`**, tracking Filament **1.77.1** upstream. Always upgrade all `dev.nucleusframework.filament:*` artifacts together — mixed versions are not supported.
 
 The Filament version is exposed as `filaVersion` in the root `gradle.properties` and matches the upstream tag of [`google/filament`](https://github.com/google/filament/releases).

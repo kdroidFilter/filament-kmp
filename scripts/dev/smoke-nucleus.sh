@@ -23,5 +23,9 @@ echo "surfaces: ${surfaces:-none}  frames delivered: $frames  (log: $LOG)"
 if [[ " $surfaces " != *" $EXPECTED "* || "$frames" -eq 0 ]]; then
     echo "expected frames through '$EXPECTED'" >&2
     tail -40 "$LOG" >&2
+    # A native crash leaves its stacks in hs_err_pid*.log next to the app.
+    for f in "$ROOT"/samples/nucleusApp/hs_err_pid*.log; do
+        [[ -f "$f" ]] && sed -n '/^Native frames/,/^$/p; /^Java frames/,/^$/p' "$f" >&2
+    done
     exit 1
 fi

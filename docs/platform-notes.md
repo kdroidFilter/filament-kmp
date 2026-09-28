@@ -61,7 +61,21 @@ The Desktop integration renders to an offscreen readable swap chain and copies p
 - **Transfer bandwidth** scaling with window size (a 4K window reads back ~33 MB/frame).
 - A **150 ms resize debounce** before reallocating textures — drag-resizing feels slightly stuttery, but final layout is clean.
 
-This is unavoidable with Compose Desktop today: there is no public API to embed a native rendering surface inside a Skia canvas.
+This is unavoidable with stock Compose Desktop: there is no public API to embed a native rendering surface inside a Skia canvas. [Nucleus](https://nucleusframework.dev) windows avoid it — see below.
+
+### GPU rendering in Nucleus windows
+
+When the app runs on [Nucleus](https://nucleusframework.dev) (2.6+, Tao backend), `FilamentView` / `FilamentSceneView` render on the window's own GPU context instead: no readback, no CPU copy, one frame less latency. Nothing to configure — `filament-compose` detects Nucleus on the classpath; `-Dfilament.compose.nucleus=false` forces the readback path.
+
+| Host | Path |
+|---|---|
+| macOS | Filament renders into an `MTLTexture` on the window's Metal device, composited by Nucleus's `TextureView` |
+| Linux | Filament (EGL build) shares the window's EGL context and renders into a GL texture Skia draws directly |
+| Windows | Filament (desktop GL) renders into a D3D11 texture through `WGL_NV_DX_interop2`, imported by Nucleus's `TextureView`. Falls back to readback where the driver lacks the extension |
+
+Requirements: the engine from `rememberFilamentEngine()` (the default of `FilamentSceneView`) — on Linux/Windows it is created on the window's GL context, so a hand-built `Engine` or an explicit non-GL backend keeps the readback path there. Linux needs the EGL-enabled Filament libs the release ships (`scripts/dev/build-host-libs.sh linuxX64` for local builds; the upstream GLX tarball keeps readback).
+
+On an Apple M4 at 1280×800 dp, both paths capped at 30 fps (`scripts/dev/bench-desktop.sh duck 20 nucleus-gpu@30 nucleus-offscreen`), the GPU path uses about half the process CPU (median 25 % vs 57 % of a core); uncapped it also delivers every display frame (60 fps where readback reaches 30).
 
 ### Native library loading
 

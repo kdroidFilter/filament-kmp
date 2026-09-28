@@ -82,6 +82,7 @@ external interface FilamentC : FilamentModule {
     fun _FilaEngineBuilder_destroy(builder: Int)
     fun _FilaEngineBuilder_feature(builder: Int, name: Int, value: Int)
     fun _FilaEngineBuilder_featureLevel(builder: Int, featureLevel: Int)
+    fun _FilaEngineBuilder_gpuShare(builder: Int, share: Int)
     fun _FilaEngineBuilder_paused(builder: Int, paused: Int)
     fun _FilaEngineBuilder_sharedContext(builder: Int, sharedContext: Int)
     fun _FilaEngine_compile(engine: Int, priority: Int, material: Int, view: Int, shadowReceiver: Int, skinning: Int, callback: Int, userData: Int)
@@ -167,6 +168,14 @@ external interface FilamentC : FilamentModule {
     fun _FilaEntityManager_isAlive(em: Int, entity: Int): Int
     fun _FilaFence_wait(fence: Int, mode: Int, timeoutNanoSeconds: JsBigInt): Int
     fun _FilaFence_waitAndDestroy(fence: Int, mode: Int): Int
+    fun _FilaGpuShare_create(hostEglDisplay: Int): Int
+    fun _FilaGpuShare_destroy(share: Int)
+    fun _FilaGpuTexture_create(share: Int, width: Int, height: Int): Int
+    fun _FilaGpuTexture_destroy(texture: Int)
+    fun _FilaGpuTexture_glName(texture: Int): Int
+    fun _FilaGpuTexture_handle(texture: Int): Int
+    fun _FilaGpuTexture_lock(texture: Int): Int
+    fun _FilaGpuTexture_unlock(texture: Int): Int
     fun _FilaIndexBufferBuilder_bufferType(builder: Int, indexType: Int)
     fun _FilaIndexBufferBuilder_build(builder: Int, engine: Int): Int
     fun _FilaIndexBufferBuilder_create(): Int
@@ -781,6 +790,7 @@ fun FilaEngineBuilder_create(): Int = fila._FilaEngineBuilder_create()
 fun FilaEngineBuilder_destroy(builder: Int) = fila._FilaEngineBuilder_destroy(builder)
 fun FilaEngineBuilder_feature(builder: Int, name: String?, value: Boolean) = fila.heapScoped { fila._FilaEngineBuilder_feature(builder, cString(name), if (value) 1 else 0) }
 fun FilaEngineBuilder_featureLevel(builder: Int, featureLevel: Int) = fila._FilaEngineBuilder_featureLevel(builder, featureLevel)
+fun FilaEngineBuilder_gpuShare(builder: Int, share: Int) = fila._FilaEngineBuilder_gpuShare(builder, share)
 fun FilaEngineBuilder_paused(builder: Int, paused: Boolean) = fila._FilaEngineBuilder_paused(builder, if (paused) 1 else 0)
 fun FilaEngineBuilder_sharedContext(builder: Int, sharedContext: Int) = fila._FilaEngineBuilder_sharedContext(builder, sharedContext)
 fun FilaEngine_compile(engine: Int, priority: Int, material: Int, view: Int, shadowReceiver: Int, skinning: Int, callback: Int, userData: Int) = fila._FilaEngine_compile(engine, priority, material, view, shadowReceiver, skinning, callback, userData)
@@ -866,6 +876,14 @@ fun FilaEntityManager_getMaxEntityCount(em: Int): Int = fila._FilaEntityManager_
 fun FilaEntityManager_isAlive(em: Int, entity: Int): Boolean = fila._FilaEntityManager_isAlive(em, entity) != 0
 fun FilaFence_wait(fence: Int, mode: Int, timeoutNanoSeconds: Long): Int = fila._FilaFence_wait(fence, mode, timeoutNanoSeconds.toI64())
 fun FilaFence_waitAndDestroy(fence: Int, mode: Int): Int = fila._FilaFence_waitAndDestroy(fence, mode)
+fun FilaGpuShare_create(hostEglDisplay: Int): Int = fila._FilaGpuShare_create(hostEglDisplay)
+fun FilaGpuShare_destroy(share: Int) = fila._FilaGpuShare_destroy(share)
+fun FilaGpuTexture_create(share: Int, width: Int, height: Int): Int = fila._FilaGpuTexture_create(share, width, height)
+fun FilaGpuTexture_destroy(texture: Int) = fila._FilaGpuTexture_destroy(texture)
+fun FilaGpuTexture_glName(texture: Int): Int = fila._FilaGpuTexture_glName(texture)
+fun FilaGpuTexture_handle(texture: Int): Int = fila._FilaGpuTexture_handle(texture)
+fun FilaGpuTexture_lock(texture: Int): Boolean = fila._FilaGpuTexture_lock(texture) != 0
+fun FilaGpuTexture_unlock(texture: Int): Boolean = fila._FilaGpuTexture_unlock(texture) != 0
 fun FilaIndexBufferBuilder_bufferType(builder: Int, indexType: Int) = fila._FilaIndexBufferBuilder_bufferType(builder, indexType)
 fun FilaIndexBufferBuilder_build(builder: Int, engine: Int): Int = fila._FilaIndexBufferBuilder_build(builder, engine)
 fun FilaIndexBufferBuilder_create(): Int = fila._FilaIndexBufferBuilder_create()

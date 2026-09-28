@@ -21,6 +21,7 @@ Each entry is one line; click the version link at the bottom for the full diff.
 - **Web runs on our own C API compiled to wasm** instead of upstream's embind `filament.js`; `:web` now holds the generated externals and runtime (package `io.github.erkko68.filament.wasm`).
 
 ### Added
+- **GPU rendering in Nucleus windows** (`filament-compose`, JVM): inside a [Nucleus](https://nucleusframework.dev) 2.6 window, views render on the window's GPU (Metal / shared EGL / D3D11 interop) instead of reading pixels back through the CPU — about half the process CPU at the same frame rate in `scripts/dev/bench-desktop.sh`. See [Platform Notes](docs/platform-notes.md#gpu-rendering-in-nucleus-windows).
 - **`renderingEnabled` on `FilamentView` / `FilamentSceneView`** (`filament-compose`): `false` stops the render loop and keeps the last frame on screen, so a static or hidden view no longer renders every display refresh.
 - **JVM runtimes for Intel macOS and Windows on ARM**: `filament-ffm-runtime-macos-x64` and `filament-ffm-runtime-windows-arm64`, with Filament built from source since upstream ships no prebuilts for them.
 - **`MaterialBuilder` on web** via the optional `filamat-kmp.wasm`; load it with `Filamat.initJs`.

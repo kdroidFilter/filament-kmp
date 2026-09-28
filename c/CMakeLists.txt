@@ -141,6 +141,7 @@ add_filament_library(stb)
 # The C-wrapper library
 set(FILAMENT_C_SOURCES
     filament/cpp/Engine.cpp
+    filament/cpp/Interop.cpp
     filament/cpp/Camera.cpp
     filament/cpp/Material.cpp
     filament/cpp/RenderableManager.cpp
@@ -447,6 +448,8 @@ if (FILAMENT_BUILD_SHARED)
         # PlatformWGL / BlueGLWindows need the Win32 OpenGL + GDI libs;
         # shlwapi is used by utils::Path.
         target_link_libraries(filament-c-jvm PRIVATE opengl32 gdi32 user32 shlwapi)
+        # Interop.cpp: D3D11 textures shared with the host through WGL_NV_DX_interop2.
+        target_link_libraries(filament-c-jvm PRIVATE d3d11 dxgi)
     elseif (UNIX)
         # Prebuilts are built against libc++, so the wrapper must compile + link against it too,
         # or the .so won't dlopen (undefined std::__1 symbols). Must be target_* options:
@@ -454,6 +457,15 @@ if (FILAMENT_BUILD_SHARED)
         target_compile_options(filament-c-jvm PRIVATE -stdlib=libc++ -ffunction-sections -fdata-sections)
         target_link_options(filament-c-jvm PRIVATE -stdlib=libc++)
         target_link_libraries(filament-c-jvm PRIVATE GL)
+        # Libs from an EGL build of Filament (build-host-libs.sh writes the marker) run their GL
+        # backend on GLES through EGL; Interop.cpp then offers the host-display EGL share.
+        if (EXISTS "${FILAMENT_LIB_DIR}/../egl")
+            target_compile_definitions(filament-c-jvm PRIVATE FILA_EGL_PLATFORM=1)
+            # Interop.cpp subclasses PlatformEGLHeadless; Filament is built without RTTI, so the
+            # subclass must be too or it references a base typeinfo that doesn't exist.
+            set_source_files_properties(filament/cpp/Interop.cpp PROPERTIES COMPILE_OPTIONS -fno-rtti)
+            target_link_libraries(filament-c-jvm PRIVATE EGL GLESv2)
+        endif()
         # With the version-script seal below, gc-sections drops code unreachable from
         # the Fila* exports (ELF analogue of the macOS -dead_strip above).
         target_link_options(filament-c-jvm PRIVATE "LINKER:--gc-sections")

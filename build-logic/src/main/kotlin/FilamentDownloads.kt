@@ -192,10 +192,14 @@ abstract class DownloadFilamentPrebuiltsTask : DefaultTask() {
 
         val stampFile = outDir.resolve(".prebuilt-source")
         val stamp = "$version|$prefix"
-        if (outDir.exists() && (outDir.list()?.isNotEmpty() == true) &&
-            stampFile.isFile && stampFile.readText().trim() == stamp
-        ) {
+        val existing = stampFile.takeIf { it.isFile }?.readText()?.trim()
+        if (outDir.exists() && (outDir.list()?.isNotEmpty() == true) && existing == stamp) {
             logger.lifecycle("[$targetName] up-to-date ($outDir)")
+            return
+        }
+        // Libs from scripts/dev/build-host-libs.sh at this version win over the release tarball.
+        if (existing?.startsWith("$version|local") == true) {
+            logger.lifecycle("[$targetName] source-built libs kept ($outDir)")
             return
         }
 

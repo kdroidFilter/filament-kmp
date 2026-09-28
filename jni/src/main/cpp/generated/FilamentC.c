@@ -14,6 +14,7 @@
 #include "FilaTypes.h"
 #include "IndexBuffer.h"
 #include "IndirectLight.h"
+#include "Interop.h"
 #include "LightManager.h"
 #include "Material.h"
 #include "MaterialInstance.h"
@@ -343,6 +344,10 @@ JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaEngineB
 
 JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaEngineBuilder_1featureLevel(JNIEnv* env, jclass cls, jlong a_builder, jint a_featureLevel) {
     FilaEngineBuilder_featureLevel((FilaEngineBuilder *)(intptr_t) a_builder, (FilaEngineFeatureLevel) a_featureLevel);
+}
+
+JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaEngineBuilder_1gpuShare(JNIEnv* env, jclass cls, jlong a_builder, jlong a_share) {
+    FilaEngineBuilder_gpuShare((FilaEngineBuilder *)(intptr_t) a_builder, (FilaGpuShare *)(intptr_t) a_share);
 }
 
 JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaEngineBuilder_1paused(JNIEnv* env, jclass cls, jlong a_builder, jboolean a_paused) {
@@ -691,6 +696,38 @@ JNIEXPORT jint JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaFence_1
 
 JNIEXPORT jint JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaFence_1waitAndDestroy(JNIEnv* env, jclass cls, jlong a_fence, jint a_mode) {
     return (jint) FilaFence_waitAndDestroy((FilaFence *)(intptr_t) a_fence, (FilaFenceMode) a_mode);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuShare_1create(JNIEnv* env, jclass cls, jlong a_hostEglDisplay) {
+    return (jlong)(intptr_t) FilaGpuShare_create((void *)(intptr_t) a_hostEglDisplay);
+}
+
+JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuShare_1destroy(JNIEnv* env, jclass cls, jlong a_share) {
+    FilaGpuShare_destroy((FilaGpuShare *)(intptr_t) a_share);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1create(JNIEnv* env, jclass cls, jlong a_share, jint a_width, jint a_height) {
+    return (jlong)(intptr_t) FilaGpuTexture_create((FilaGpuShare *)(intptr_t) a_share, (int32_t) a_width, (int32_t) a_height);
+}
+
+JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1destroy(JNIEnv* env, jclass cls, jlong a_texture) {
+    FilaGpuTexture_destroy((FilaGpuTexture *)(intptr_t) a_texture);
+}
+
+JNIEXPORT jint JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1glName(JNIEnv* env, jclass cls, jlong a_texture) {
+    return (jint) FilaGpuTexture_glName((FilaGpuTexture *)(intptr_t) a_texture);
+}
+
+JNIEXPORT jlong JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1handle(JNIEnv* env, jclass cls, jlong a_texture) {
+    return (jlong)(intptr_t) FilaGpuTexture_handle((FilaGpuTexture *)(intptr_t) a_texture);
+}
+
+JNIEXPORT jboolean JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1lock(JNIEnv* env, jclass cls, jlong a_texture) {
+    return FilaGpuTexture_lock((FilaGpuTexture *)(intptr_t) a_texture) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaGpuTexture_1unlock(JNIEnv* env, jclass cls, jlong a_texture) {
+    return FilaGpuTexture_unlock((FilaGpuTexture *)(intptr_t) a_texture) ? JNI_TRUE : JNI_FALSE;
 }
 
 JNIEXPORT void JNICALL Java_io_github_erkko68_filament_jni_FilamentC_FilaIndexBufferBuilder_1bufferType(JNIEnv* env, jclass cls, jlong a_builder, jint a_indexType) {

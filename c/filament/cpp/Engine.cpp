@@ -25,17 +25,13 @@
 #include <utils/tribool.h>
 
 #include "../c/Engine.h"
+#include "EngineBuilderWrapper.h"
 #include "FilaCommon.h"
 
 using namespace filament;
 using namespace utils;
 
 extern "C" {
-
-struct FilaEngineBuilderWrapper {
-    Engine::Builder builder;
-    Engine::Config config;
-};
 
 FilaEngineBuilder *FilaEngineBuilder_create() {
   return reinterpret_cast<FilaEngineBuilder *>(new FilaEngineBuilderWrapper());

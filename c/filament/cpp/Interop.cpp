@@ -5,81 +5,161 @@
 
 using namespace filament;
 
-// ── Linux / EGL ──────────────────────────────────────────────────────────────────────────────
+// ── Linux: GLES on the host's EGLDisplay, textures exported as EGLImages ──────────────────────
 #if defined(__linux__) && defined(FILA_EGL_PLATFORM)
 
 #include <backend/platforms/PlatformEGLHeadless.h>
 
-using filament::backend::PlatformEGLHeadless;
-
 #include <EGL/egl.h>
-#include <GL/gl.h>
+#include <EGL/eglext.h>
+#include <GLES3/gl3.h>
+
+using filament::backend::PlatformEGLHeadless;
 
 namespace {
 
-// PlatformEGLHeadless on the host's display instead of EGL_DEFAULT_DISPLAY: a context can only
-// share with one created on the same EGLDisplay. The display is already initialized by its owner.
+// PlatformEGLHeadless on the host's display instead of EGL_DEFAULT_DISPLAY: EGL only shares
+// objects between contexts of one display. The display is already initialized by its owner.
 class HostDisplayPlatform final : public PlatformEGLHeadless {
 public:
     explicit HostDisplayPlatform(EGLDisplay display) noexcept { setEglDisplay(display); }
 };
 
-using PfnGenTextures = void (*)(GLsizei, GLuint*);
-using PfnDeleteTextures = void (*)(GLsizei, const GLuint*);
-using PfnBindTexture = void (*)(GLenum, GLuint);
-using PfnTexImage2D = void (*)(GLenum, GLint, GLint, GLsizei, GLsizei, GLint, GLenum, GLenum, const void*);
-using PfnTexParameteri = void (*)(GLenum, GLenum, GLint);
-using PfnFlush = void (*)();
+// Makes the share's context current for the scope, then restores the calling thread's API and
+// context (the host's desktop-GL one, typically): GL and GLES dispatch through one current
+// context per thread, so it has to be put back explicitly.
+struct ScopedCurrent {
+    EGLenum api = eglQueryAPI();
+    EGLDisplay display = eglGetCurrentDisplay();
+    EGLSurface draw = eglGetCurrentSurface(EGL_DRAW);
+    EGLSurface read = eglGetCurrentSurface(EGL_READ);
+    EGLContext context = eglGetCurrentContext();
+    EGLDisplay ownDisplay;
+    bool ok;
 
-template <typename T> T gl(const char* name) { return reinterpret_cast<T>(eglGetProcAddress(name)); }
+    ScopedCurrent(EGLDisplay dpy, EGLSurface surface, EGLContext ctx) : ownDisplay(dpy) {
+        eglBindAPI(EGL_OPENGL_ES_API);
+        ok = eglMakeCurrent(dpy, surface, surface, ctx) == EGL_TRUE;
+    }
+    ~ScopedCurrent() {
+        eglBindAPI(EGL_OPENGL_ES_API);
+        eglMakeCurrent(ownDisplay, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+        eglBindAPI(api);
+        if (context != EGL_NO_CONTEXT) eglMakeCurrent(display, draw, read, context);
+    }
+};
 
 } // namespace
 
-bool FilaInterop_hasEglPlatform(void) { return true; }
+struct FilaGpuShare {
+    EGLDisplay display = EGL_NO_DISPLAY;
+    EGLContext context = EGL_NO_CONTEXT;
+    EGLSurface surface = EGL_NO_SURFACE; // 1x1 pbuffer: surfaceless contexts are not universal
+    HostDisplayPlatform* platform = nullptr;
+    PFNEGLCREATEIMAGEKHRPROC createImage = nullptr;
+    PFNEGLDESTROYIMAGEKHRPROC destroyImage = nullptr;
+};
 
-void FilaEngineBuilder_eglDisplay(FilaEngineBuilder* builder, void* eglDisplay) {
-    // ponytail: the platform must outlive the engine and Filament never frees it; one small
-    // object per engine leaks. Track it per engine if engines get created in a loop.
-    auto* platform = new HostDisplayPlatform(static_cast<EGLDisplay>(eglDisplay));
+struct FilaGpuTexture {
+    FilaGpuShare* share = nullptr;
+    GLuint glName = 0;
+    EGLImageKHR image = EGL_NO_IMAGE_KHR;
+};
+
+FilaGpuShare* FilaGpuShare_create(void* hostEglDisplay) {
+    auto* s = new (std::nothrow) FilaGpuShare();
+    if (!s || !hostEglDisplay) {
+        delete s;
+        return nullptr;
+    }
+    s->display = static_cast<EGLDisplay>(hostEglDisplay);
+    s->createImage = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
+    s->destroyImage = reinterpret_cast<PFNEGLDESTROYIMAGEKHRPROC>(eglGetProcAddress("eglDestroyImageKHR"));
+
+    EGLint const configAttribs[] = {
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
+            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
+            EGL_NONE };
+    EGLint const contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
+    EGLint const pbufferAttribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
+    EGLConfig config = nullptr;
+    EGLint count = 0;
+    EGLenum const api = eglQueryAPI();
+    eglBindAPI(EGL_OPENGL_ES_API);
+    if (eglChooseConfig(s->display, configAttribs, &config, 1, &count) && count == 1) {
+        s->context = eglCreateContext(s->display, config, EGL_NO_CONTEXT, contextAttribs);
+        s->surface = eglCreatePbufferSurface(s->display, config, pbufferAttribs);
+    }
+    eglBindAPI(api);
+    if (s->context == EGL_NO_CONTEXT || s->surface == EGL_NO_SURFACE || !s->createImage || !s->destroyImage) {
+        FilaGpuShare_destroy(s);
+        return nullptr;
+    }
+    s->platform = new HostDisplayPlatform(s->display);
+    return s;
+}
+
+void FilaGpuShare_destroy(FilaGpuShare* s) {
+    if (!s) return;
+    if (s->surface != EGL_NO_SURFACE) eglDestroySurface(s->display, s->surface);
+    if (s->context != EGL_NO_CONTEXT) eglDestroyContext(s->display, s->context);
+    delete s->platform;
+    delete s;
+}
+
+void FilaEngineBuilder_gpuShare(FilaEngineBuilder* builder, FilaGpuShare* share) {
+    if (!share) return;
     auto& b = reinterpret_cast<FilaEngineBuilderWrapper*>(builder)->builder;
     b.backend(Engine::Backend::OPENGL);
-    b.platform(platform);
+    b.platform(share->platform);
+    b.sharedContext(share->context);
 }
 
-uint32_t FilaGl_createTexture(int32_t width, int32_t height) {
-    GLuint name = 0;
-    gl<PfnGenTextures>("glGenTextures")(1, &name);
-    if (name == 0) return 0;
-    gl<PfnBindTexture>("glBindTexture")(GL_TEXTURE_2D, name);
-    auto texParameteri = gl<PfnTexParameteri>("glTexParameteri");
-    texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    texParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAX_LEVEL, 0);
-    gl<PfnTexImage2D>("glTexImage2D")(GL_TEXTURE_2D, 0, GL_RGBA8, width, height, 0, GL_RGBA,
-            GL_UNSIGNED_BYTE, nullptr);
-    gl<PfnBindTexture>("glBindTexture")(GL_TEXTURE_2D, 0);
-    return name;
+FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_t height) {
+    if (!share || width <= 0 || height <= 0) return nullptr;
+    auto* t = new (std::nothrow) FilaGpuTexture();
+    if (!t) return nullptr;
+    t->share = share;
+
+    ScopedCurrent current(share->display, share->surface, share->context);
+    if (current.ok) {
+        glGenTextures(1, &t->glName);
+        glBindTexture(GL_TEXTURE_2D, t->glName);
+        glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, width, height);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        EGLint const imageAttribs[] = { EGL_GL_TEXTURE_LEVEL_KHR, 0, EGL_NONE };
+        t->image = share->createImage(share->display, share->context, EGL_GL_TEXTURE_2D_KHR,
+                reinterpret_cast<EGLClientBuffer>(static_cast<uintptr_t>(t->glName)), imageAttribs);
+        // Make the new texture visible to Filament's shared context and to the host.
+        glFinish();
+    }
+    if (t->image == EGL_NO_IMAGE_KHR) {
+        FilaGpuTexture_destroy(t);
+        return nullptr;
+    }
+    return t;
 }
 
-void FilaGl_deleteTexture(uint32_t name) {
-    GLuint n = name;
-    gl<PfnDeleteTextures>("glDeleteTextures")(1, &n);
+uint32_t FilaGpuTexture_glName(FilaGpuTexture* t) { return t ? t->glName : 0; }
+void* FilaGpuTexture_handle(FilaGpuTexture* t) { return t ? t->image : nullptr; }
+bool FilaGpuTexture_lock(FilaGpuTexture* t) { return t != nullptr; }
+bool FilaGpuTexture_unlock(FilaGpuTexture* t) { return t != nullptr; }
+
+void FilaGpuTexture_destroy(FilaGpuTexture* t) {
+    if (!t) return;
+    if (t->image != EGL_NO_IMAGE_KHR) t->share->destroyImage(t->share->display, t->image);
+    if (t->glName) {
+        ScopedCurrent current(t->share->display, t->share->surface, t->share->context);
+        if (current.ok) glDeleteTextures(1, &t->glName);
+    }
+    delete t;
 }
 
-void FilaGl_flush(void) { gl<PfnFlush>("glFlush")(); }
-
-#else
-
-bool FilaInterop_hasEglPlatform(void) { return false; }
-void FilaEngineBuilder_eglDisplay(FilaEngineBuilder*, void*) {}
-uint32_t FilaGl_createTexture(int32_t, int32_t) { return 0; }
-void FilaGl_deleteTexture(uint32_t) {}
-void FilaGl_flush(void) {}
-
-#endif
-
-// ── Windows / WGL_NV_DX_interop2 ─────────────────────────────────────────────────────────────
-#if defined(_WIN32)
+// ── Windows: WGL shared with Filament, textures aliasing D3D11 (WGL_NV_DX_interop2) ──────────
+#elif defined(_WIN32)
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -111,7 +191,7 @@ struct ScopedCurrent {
 
 } // namespace
 
-struct FilaDxShare {
+struct FilaGpuShare {
     HWND window = nullptr;
     HDC dc = nullptr;
     HGLRC rc = nullptr;
@@ -125,20 +205,20 @@ struct FilaDxShare {
     PfnDXLockObjects unlockObjects = nullptr;
 };
 
-struct FilaDxTexture {
-    FilaDxShare* share = nullptr;
+struct FilaGpuTexture {
+    FilaGpuShare* share = nullptr;
     ID3D11Texture2D* texture = nullptr;
     HANDLE sharedHandle = nullptr;
     GLuint glName = 0;
     HANDLE interopObject = nullptr;
 };
 
-FilaDxShare* FilaDxShare_create(void) {
-    auto* s = new (std::nothrow) FilaDxShare();
+FilaGpuShare* FilaGpuShare_create(void*) {
+    auto* s = new (std::nothrow) FilaGpuShare();
     if (!s) return nullptr;
 
     // A pixel format needs a DC, hence a hidden window; STATIC needs no class registration.
-    s->window = CreateWindowExA(0, "STATIC", "filament-dx-share", WS_POPUP, 0, 0, 1, 1,
+    s->window = CreateWindowExA(0, "STATIC", "filament-gpu-share", WS_POPUP, 0, 0, 1, 1,
             nullptr, nullptr, GetModuleHandleA(nullptr), nullptr);
     s->dc = s->window ? GetDC(s->window) : nullptr;
     // Same pixel format as Filament's PlatformWGL: some drivers only share across equal formats.
@@ -152,7 +232,7 @@ FilaDxShare* FilaDxShare_create(void) {
     pfd.iLayerType = PFD_MAIN_PLANE;
     int format = s->dc ? ChoosePixelFormat(s->dc, &pfd) : 0;
     if (!format || !SetPixelFormat(s->dc, format, &pfd) || !(s->rc = wglCreateContext(s->dc))) {
-        FilaDxShare_destroy(s);
+        FilaGpuShare_destroy(s);
         return nullptr;
     }
 
@@ -171,15 +251,13 @@ FilaDxShare* FilaDxShare_create(void) {
     if (!hasInterop || FAILED(D3D11CreateDevice(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr,
             D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &s->device, nullptr,
             nullptr)) || !(s->interopDevice = openDevice(s->device))) {
-        FilaDxShare_destroy(s);
+        FilaGpuShare_destroy(s);
         return nullptr;
     }
     return s;
 }
 
-void* FilaDxShare_glContext(FilaDxShare* share) { return share ? share->rc : nullptr; }
-
-void FilaDxShare_destroy(FilaDxShare* s) {
+void FilaGpuShare_destroy(FilaGpuShare* s) {
     if (!s) return;
     if (s->interopDevice) {
         ScopedCurrent current(s->dc, s->rc);
@@ -192,9 +270,16 @@ void FilaDxShare_destroy(FilaDxShare* s) {
     delete s;
 }
 
-FilaDxTexture* FilaDxTexture_create(FilaDxShare* share, int32_t width, int32_t height) {
+void FilaEngineBuilder_gpuShare(FilaEngineBuilder* builder, FilaGpuShare* share) {
+    if (!share) return;
+    auto& b = reinterpret_cast<FilaEngineBuilderWrapper*>(builder)->builder;
+    b.backend(Engine::Backend::OPENGL);
+    b.sharedContext(share->rc);
+}
+
+FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_t height) {
     if (!share || width <= 0 || height <= 0) return nullptr;
-    auto* t = new (std::nothrow) FilaDxTexture();
+    auto* t = new (std::nothrow) FilaGpuTexture();
     if (!t) return nullptr;
     t->share = share;
 
@@ -213,7 +298,7 @@ FilaDxTexture* FilaDxTexture_create(FilaDxShare* share, int32_t width, int32_t h
             FAILED(t->texture->QueryInterface(__uuidof(IDXGIResource), reinterpret_cast<void**>(&resource))) ||
             FAILED(resource->GetSharedHandle(&t->sharedHandle))) {
         if (resource) resource->Release();
-        FilaDxTexture_destroy(t);
+        FilaGpuTexture_destroy(t);
         return nullptr;
     }
     resource->Release();
@@ -224,28 +309,28 @@ FilaDxTexture* FilaDxTexture_create(FilaDxShare* share, int32_t width, int32_t h
     t->interopObject = share->registerObject(share->interopDevice, t->texture, t->glName,
             kGlTexture2D, kWglAccessReadWrite);
     if (!current.ok || !t->interopObject) {
-        FilaDxTexture_destroy(t);
+        FilaGpuTexture_destroy(t);
         return nullptr;
     }
     return t;
 }
 
-uint32_t FilaDxTexture_glName(FilaDxTexture* t) { return t ? t->glName : 0; }
-void* FilaDxTexture_sharedHandle(FilaDxTexture* t) { return t ? t->sharedHandle : nullptr; }
+uint32_t FilaGpuTexture_glName(FilaGpuTexture* t) { return t ? t->glName : 0; }
+void* FilaGpuTexture_handle(FilaGpuTexture* t) { return t ? t->sharedHandle : nullptr; }
 
-bool FilaDxTexture_lock(FilaDxTexture* t) {
+bool FilaGpuTexture_lock(FilaGpuTexture* t) {
     if (!t) return false;
     ScopedCurrent current(t->share->dc, t->share->rc);
     return current.ok && t->share->lockObjects(t->share->interopDevice, 1, &t->interopObject);
 }
 
-bool FilaDxTexture_unlock(FilaDxTexture* t) {
+bool FilaGpuTexture_unlock(FilaGpuTexture* t) {
     if (!t) return false;
     ScopedCurrent current(t->share->dc, t->share->rc);
     return current.ok && t->share->unlockObjects(t->share->interopDevice, 1, &t->interopObject);
 }
 
-void FilaDxTexture_destroy(FilaDxTexture* t) {
+void FilaGpuTexture_destroy(FilaGpuTexture* t) {
     if (!t) return;
     {
         ScopedCurrent current(t->share->dc, t->share->rc);
@@ -256,16 +341,17 @@ void FilaDxTexture_destroy(FilaDxTexture* t) {
     delete t;
 }
 
+// ── Elsewhere (macOS uses Metal textures directly, see NucleusMetalSurface.jvm.kt) ───────────
 #else
 
-FilaDxShare* FilaDxShare_create(void) { return nullptr; }
-void* FilaDxShare_glContext(FilaDxShare*) { return nullptr; }
-void FilaDxShare_destroy(FilaDxShare*) {}
-FilaDxTexture* FilaDxTexture_create(FilaDxShare*, int32_t, int32_t) { return nullptr; }
-uint32_t FilaDxTexture_glName(FilaDxTexture*) { return 0; }
-void* FilaDxTexture_sharedHandle(FilaDxTexture*) { return nullptr; }
-bool FilaDxTexture_lock(FilaDxTexture*) { return false; }
-bool FilaDxTexture_unlock(FilaDxTexture*) { return false; }
-void FilaDxTexture_destroy(FilaDxTexture*) {}
+FilaGpuShare* FilaGpuShare_create(void*) { return nullptr; }
+void FilaGpuShare_destroy(FilaGpuShare*) {}
+void FilaEngineBuilder_gpuShare(FilaEngineBuilder*, FilaGpuShare*) {}
+FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare*, int32_t, int32_t) { return nullptr; }
+uint32_t FilaGpuTexture_glName(FilaGpuTexture*) { return 0; }
+void* FilaGpuTexture_handle(FilaGpuTexture*) { return nullptr; }
+bool FilaGpuTexture_lock(FilaGpuTexture*) { return false; }
+bool FilaGpuTexture_unlock(FilaGpuTexture*) { return false; }
+void FilaGpuTexture_destroy(FilaGpuTexture*) {}
 
 #endif

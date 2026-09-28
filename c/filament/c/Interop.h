@@ -10,47 +10,37 @@
 extern "C" {
 #endif
 
-// Zero-copy interop with a host toolkit's GPU context (filament-compose's Nucleus surfaces).
-// Every function exists on every platform; where a path does not apply it is a no-op that
-// returns 0/NULL/false, so callers probe instead of branching on the OS.
+// Zero-copy interop with a host toolkit's compositor (filament-compose's Nucleus surfaces): an
+// OpenGL Filament engine renders into textures the host imports without a CPU copy.
+//   Linux:   a GLES context on the host's EGLDisplay, shared with Filament; textures are exported
+//            as EGLImages. Needs Filament built with FILAMENT_SUPPORTS_EGL_ON_LINUX
+//            (scripts/dev/build-host-libs.sh) — upstream Linux prebuilts are GLX-only.
+//   Windows: a WGL context shared with Filament; textures alias shareable D3D11 textures through
+//            WGL_NV_DX_interop2 and are exported as legacy DXGI shared handles.
+// Every function exists on every platform; where unsupported, creation returns NULL.
 
-// ── Linux (Filament built with FILAMENT_SUPPORTS_EGL_ON_LINUX) ────────────────────────────────
+typedef struct FilaGpuShare FilaGpuShare;
 
-// True when this library carries the EGL platform (source-built Linux libs, see
-// scripts/dev/build-host-libs.sh). Upstream Linux prebuilts are GLX-only.
-bool FilaInterop_hasEglPlatform(void);
+// hostEglDisplay: the host's initialized EGLDisplay on Linux, ignored elsewhere. NULL when the
+// platform, driver or Filament build cannot do it.
+FilaGpuShare* FilaGpuShare_create(void* hostEglDisplay);
+void FilaGpuShare_destroy(FilaGpuShare* share);
 
-// Makes the engine render through EGL on `eglDisplay` (an initialized EGLDisplay, typically the
-// host's), so that the EGLContext passed to FilaEngineBuilder_sharedContext can be shared.
-// Requires FilaInterop_hasEglPlatform(); forces the OpenGL backend.
-void FilaEngineBuilder_eglDisplay(FilaEngineBuilder* builder, void* eglDisplay);
+// Configures the builder to render on the share's device: OpenGL backend, shared context and,
+// on Linux, the host's EGLDisplay. The share must outlive the engine.
+void FilaEngineBuilder_gpuShare(FilaEngineBuilder* builder, FilaGpuShare* share);
 
-// RGBA8 2D texture in the context current on the calling thread; returns its GL name (0 on
-// failure). Import it into Filament with FilaTextureBuilder_importTexture.
-uint32_t FilaGl_createTexture(int32_t width, int32_t height);
-void FilaGl_deleteTexture(uint32_t name);
-// glFlush() on the current context, making its commands visible to shared contexts.
-void FilaGl_flush(void);
-
-// ── Windows (WGL_NV_DX_interop2) ─────────────────────────────────────────────────────────────
-
-// A D3D11 device plus a hidden WGL context whose GL objects alias D3D11 textures. Pass
-// FilaDxShare_glContext() to FilaEngineBuilder_sharedContext (OpenGL backend) so Filament
-// shares its namespace. NULL when the driver lacks WGL_NV_DX_interop2, or not on Windows.
-typedef struct FilaDxShare FilaDxShare;
-FilaDxShare* FilaDxShare_create(void);
-void* FilaDxShare_glContext(FilaDxShare* share);
-void FilaDxShare_destroy(FilaDxShare* share);
-
-// A shareable (legacy DXGI handle) BGRA8 D3D11 texture registered as a GL texture.
-typedef struct FilaDxTexture FilaDxTexture;
-FilaDxTexture* FilaDxTexture_create(FilaDxShare* share, int32_t width, int32_t height);
-uint32_t FilaDxTexture_glName(FilaDxTexture* texture);
-void* FilaDxTexture_sharedHandle(FilaDxTexture* texture);
-// GL may only touch the texture between lock and unlock; D3D11 consumers only outside.
-bool FilaDxTexture_lock(FilaDxTexture* texture);
-bool FilaDxTexture_unlock(FilaDxTexture* texture);
-void FilaDxTexture_destroy(FilaDxTexture* texture);
+// An RGBA8 texture importable into Filament (FilaTextureBuilder_importTexture with glName)
+// and by the host (handle: an EGLImage on Linux, a DXGI shared handle on Windows).
+typedef struct FilaGpuTexture FilaGpuTexture;
+FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_t height);
+uint32_t FilaGpuTexture_glName(FilaGpuTexture* texture);
+void* FilaGpuTexture_handle(FilaGpuTexture* texture);
+// Filament may only render into the texture between lock and unlock (Windows interop locking;
+// always succeeds on Linux).
+bool FilaGpuTexture_lock(FilaGpuTexture* texture);
+bool FilaGpuTexture_unlock(FilaGpuTexture* texture);
+void FilaGpuTexture_destroy(FilaGpuTexture* texture);
 
 #ifdef __cplusplus
 }

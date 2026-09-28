@@ -97,7 +97,7 @@ jobs:
         run: |
           for i in 1 2 3; do
             sudo apt-get update
-            sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev libegl1 libegl-dev xvfb && exit 0
+            sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev libegl1 libegl-dev libgles-dev xvfb && exit 0
             echo "apt attempt $i failed; retrying in 20s" && sleep 20
           done
           exit 1

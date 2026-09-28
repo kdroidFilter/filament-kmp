@@ -457,11 +457,11 @@ if (FILAMENT_BUILD_SHARED)
         target_compile_options(filament-c-jvm PRIVATE -stdlib=libc++ -ffunction-sections -fdata-sections)
         target_link_options(filament-c-jvm PRIVATE -stdlib=libc++)
         target_link_libraries(filament-c-jvm PRIVATE GL)
-        # Libs from an EGL build of Filament (build-host-libs.sh writes the marker) carry
-        # PlatformEGLHeadless; Interop.cpp then exposes the host-display EGL platform.
+        # Libs from an EGL build of Filament (build-host-libs.sh writes the marker) run their GL
+        # backend on GLES through EGL; Interop.cpp then offers the host-display EGL share.
         if (EXISTS "${FILAMENT_LIB_DIR}/../egl")
             target_compile_definitions(filament-c-jvm PRIVATE FILA_EGL_PLATFORM=1)
-            target_link_libraries(filament-c-jvm PRIVATE EGL)
+            target_link_libraries(filament-c-jvm PRIVATE EGL GLESv2)
         endif()
         # With the version-script seal below, gc-sections drops code unreachable from
         # the Fila* exports (ELF analogue of the macOS -dead_strip above).

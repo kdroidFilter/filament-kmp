@@ -198,7 +198,7 @@ abstract class DownloadFilamentPrebuiltsTask : DefaultTask() {
             return
         }
         // Libs from scripts/dev/build-host-libs.sh at this version win over the release tarball.
-        if (existing == "$version|local") {
+        if (existing?.startsWith("$version|local") == true) {
             logger.lifecycle("[$targetName] source-built libs kept ($outDir)")
             return
         }

@@ -29,7 +29,6 @@ STAMP="$OUT_DIR/.prebuilt-source"
 
 ARGS=(
     -DCMAKE_BUILD_TYPE=Release
-    -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
     -DFILAMENT_SKIP_SAMPLES=ON
     -DFILAMENT_SKIP_SDL2=ON
     -DFILAMENT_BUILD_TESTING=OFF
@@ -45,7 +44,33 @@ case "$TARGET" in
     *) echo "unsupported target '$TARGET' (macosX64|mingwArm64|linuxX64|linuxArm64)" >&2; exit 1 ;;
 esac
 
-if [[ "${2:-}" != "-f" && -f "$STAMP" && "$(cat "$STAMP")" == "$VERSION|local" ]]; then
+# Source patches for this target, applied to the shared clone and reverted on exit so it stays
+# checkout-able for other tags. Part of the recipe fingerprint below.
+patch_sources() {
+    case "$TARGET" in
+        mingwArm64)
+            trap 'git -C "$CACHE_DIR" checkout --quiet -- CMakeLists.txt libs/bluegl/CMakeLists.txt' EXIT
+            # BlueGL's only 64-bit Windows trampoline is x64 MASM; use the portable C++ one
+            # (upstream ships it for 32-bit) on ARM64.
+            sed -i 's/if(NOT IS_64_BIT)/if(NOT IS_64_BIT OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")/; s/if (WIN32 AND IS_64_BIT)/if (WIN32 AND IS_64_BIT AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")/' \
+                "$CACHE_DIR/libs/bluegl/CMakeLists.txt"
+            # Filament rejects MSYS2 shells via $MSYSTEM, which Git Bash forwards to cmake even
+            # when unset. The guard targets MSYS toolchains; this build uses MSVC, so drop it.
+            sed -i 's/if(DEFINED ENV{MSYSTEM})/if(FALSE)/' "$CACHE_DIR/CMakeLists.txt" ;;
+        linux*)
+            trap 'git -C "$CACHE_DIR" checkout --quiet -- filament/backend/CMakeLists.txt' EXIT
+            # The EGL build compiles the GL backend against GLES but only links EGL, so Filament's
+            # own tools (matc, …) fail to link; add GLESv2 next to it.
+            sed -i 's/target_link_libraries(${TARGET} PUBLIC EGL)/target_link_libraries(${TARGET} PUBLIC EGL GLESv2)/' \
+                "$CACHE_DIR/filament/backend/CMakeLists.txt" ;;
+    esac
+}
+
+# The stamp carries a fingerprint of this target's recipe (options + patches), so a cached build
+# is reused until something that affects *this* target changes — CI restores the latest cache
+# per target and relies on it (see .github/actions/setup-host-libs).
+RECIPE="$( { echo "$TARGET"; printf '%s\n' "${ARGS[@]}"; declare -f patch_sources; } | cksum | cut -d' ' -f1)"
+if [[ "${2:-}" != "-f" && -f "$STAMP" && "$(cat "$STAMP")" == "$VERSION|local|$RECIPE" ]]; then
     echo "prebuilts/$TARGET/lib already built for $TAG (pass -f to rebuild)"
     exit 0
 fi
@@ -56,28 +81,9 @@ fi
 git -C "$CACHE_DIR" rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null \
     || git -C "$CACHE_DIR" fetch --depth 1 origin "refs/tags/$TAG:refs/tags/$TAG"
 git -C "$CACHE_DIR" checkout --quiet --detach "$TAG"
+patch_sources
 
-if [[ "$TARGET" == mingwArm64 ]]; then
-    # Patches are reverted on exit so the shared clone stays checkout-able for other tags.
-    trap 'git -C "$CACHE_DIR" checkout --quiet -- CMakeLists.txt libs/bluegl/CMakeLists.txt' EXIT
-    # BlueGL's only 64-bit Windows trampoline is x64 MASM; use the portable C++ one
-    # (upstream ships it for 32-bit) on ARM64.
-    sed -i 's/if(NOT IS_64_BIT)/if(NOT IS_64_BIT OR CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")/; s/if (WIN32 AND IS_64_BIT)/if (WIN32 AND IS_64_BIT AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL "ARM64")/' \
-        "$CACHE_DIR/libs/bluegl/CMakeLists.txt"
-    # Filament rejects MSYS2 shells via $MSYSTEM, which Git Bash forwards to cmake even
-    # when unset. The guard targets MSYS toolchains; this build uses MSVC, so drop it.
-    sed -i 's/if(DEFINED ENV{MSYSTEM})/if(FALSE)/' "$CACHE_DIR/CMakeLists.txt"
-fi
-
-if [[ "$TARGET" == linux* ]]; then
-    trap 'git -C "$CACHE_DIR" checkout --quiet -- filament/backend/CMakeLists.txt' EXIT
-    # The EGL build compiles the GL backend against GLES but only links EGL, so Filament's own
-    # tools (matc, …) fail to link; add GLESv2 next to it.
-    sed -i 's/target_link_libraries(${TARGET} PUBLIC EGL)/target_link_libraries(${TARGET} PUBLIC EGL GLESv2)/' \
-        "$CACHE_DIR/filament/backend/CMakeLists.txt"
-fi
-
-cmake -S "$CACHE_DIR" -B "$BUILD_DIR" "${ARGS[@]}"
+cmake -S "$CACHE_DIR" -B "$BUILD_DIR" "${ARGS[@]}" -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
 # An explicit job count: a bare --parallel means an unbounded `make -j` with Makefiles, which
 # exhausts CI runners' memory within minutes.
 cmake --build "$BUILD_DIR" --target install --config Release --parallel "$(getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)"
@@ -90,5 +96,5 @@ find "$INSTALL_DIR/lib" -type f \( -name '*.a' -o -name '*.lib' \) -exec cp {} "
 cp "$INSTALL_DIR/include/gltfio/materials/uberarchive.h" "$INCLUDE_DIR/gltfio/materials/"
 # Tells c/CMakeLists.txt these libs carry PlatformEGLHeadless (FILA_EGL_PLATFORM).
 [[ "$TARGET" == linux* ]] && touch "$ROOT/prebuilts/$TARGET/egl"
-echo "$VERSION|local" > "$STAMP"
+echo "$VERSION|local|$RECIPE" > "$STAMP"
 echo "Copied $(find "$OUT_DIR" -type f \( -name '*.a' -o -name '*.lib' \) | wc -l | tr -d ' ') $TARGET libraries for $TAG to prebuilts/$TARGET/lib"

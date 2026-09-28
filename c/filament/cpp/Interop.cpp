@@ -141,8 +141,15 @@ FilaDxShare* FilaDxShare_create(void) {
     s->window = CreateWindowExA(0, "STATIC", "filament-dx-share", WS_POPUP, 0, 0, 1, 1,
             nullptr, nullptr, GetModuleHandleA(nullptr), nullptr);
     s->dc = s->window ? GetDC(s->window) : nullptr;
-    PIXELFORMATDESCRIPTOR pfd = { sizeof(pfd), 1, PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL,
-            PFD_TYPE_RGBA, 32 };
+    // Same pixel format as Filament's PlatformWGL: some drivers only share across equal formats.
+    PIXELFORMATDESCRIPTOR pfd = {};
+    pfd.nSize = sizeof(pfd);
+    pfd.nVersion = 1;
+    pfd.dwFlags = PFD_DRAW_TO_WINDOW | PFD_SUPPORT_OPENGL | PFD_DOUBLEBUFFER;
+    pfd.iPixelType = PFD_TYPE_RGBA;
+    pfd.cColorBits = 32;
+    pfd.cDepthBits = 24;
+    pfd.iLayerType = PFD_MAIN_PLANE;
     int format = s->dc ? ChoosePixelFormat(s->dc, &pfd) : 0;
     if (!format || !SetPixelFormat(s->dc, format, &pfd) || !(s->rc = wglCreateContext(s->dc))) {
         FilaDxShare_destroy(s);

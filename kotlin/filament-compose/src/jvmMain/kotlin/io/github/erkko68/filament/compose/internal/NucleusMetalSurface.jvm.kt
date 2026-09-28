@@ -21,7 +21,6 @@ import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.Fence
 import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
-import io.github.erkko68.filament.Texture
 import io.github.erkko68.filament.View
 import io.github.erkko68.filament.Viewport
 import java.lang.foreign.Arena
@@ -112,6 +111,7 @@ internal fun NucleusMetalFilamentSurface(
                 inFlight.value = null
                 shown = pending.first
                 controller.markFrameAvailable()
+                SurfaceStats.surface("nucleus-metal")
                 SurfaceStats.frameDelivered()
             }
             val next = targets.first { it !== shown }
@@ -133,29 +133,12 @@ internal fun NucleusMetalFilamentSurface(
 private class MetalTarget(engine: Engine, device: Long, size: IntSize) {
     val mtlTexture: Long = MetalTextures.create(device, size.width, size.height)
     val source: TextureViewSource = nucleusMetalTextureSource(mtlTexture, size.width, size.height)
-    private val color: Texture = Texture.Builder()
-        .width(size.width).height(size.height).levels(1)
-        .sampler(Texture.Sampler.SAMPLER_2D)
-        .format(Texture.InternalFormat.RGBA8) // MTLPixelFormatRGBA8Unorm, see MetalTextures
-        .usage(Texture.Usage.COLOR_ATTACHMENT or Texture.Usage.SAMPLEABLE)
-        // Filament adopts a +1 reference on import (CFBridgingRelease); ours stays for Nucleus.
-        .importTexture(MetalTextures.retain(mtlTexture))
-        .build(engine)
-    private val depth: Texture = Texture.Builder()
-        .width(size.width).height(size.height).levels(1)
-        .sampler(Texture.Sampler.SAMPLER_2D)
-        .format(Texture.InternalFormat.DEPTH24)
-        .usage(Texture.Usage.DEPTH_ATTACHMENT)
-        .build(engine)
-    val renderTarget: RenderTarget = RenderTarget.Builder()
-        .texture(RenderTarget.AttachmentPoint.COLOR, color)
-        .texture(RenderTarget.AttachmentPoint.DEPTH, depth)
-        .build(engine)
+    // Filament adopts a +1 reference on import (CFBridgingRelease); ours stays for Nucleus.
+    private val target = ImportedRenderTarget(engine, MetalTextures.retain(mtlTexture), size)
+    val renderTarget: RenderTarget get() = target.renderTarget
 
     fun destroy(engine: Engine) {
-        engine.destroyRenderTarget(renderTarget)
-        engine.destroyTexture(color)
-        engine.destroyTexture(depth)
+        target.destroy(engine)
         MetalTextures.release(mtlTexture)
     }
 }

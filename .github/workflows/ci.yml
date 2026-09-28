@@ -65,13 +65,19 @@ jobs:
         include:
           - os: macos-latest
             target: macosArm64
+            nucleus-surface: nucleus-metal
           - os: macos-15-intel
             target: macosX64
             from-source: true
+          # Linux libs are built on EGL (build-host-libs.sh) so the Nucleus GPU surface works.
           - os: ubuntu-latest
             target: linuxX64
+            from-source: true
+            nucleus-surface: nucleus-egl
           - os: ubuntu-24.04-arm
             target: linuxArm64
+            from-source: true
+            nucleus-surface: nucleus-egl
           - os: windows-latest
             target: mingwX64
           - os: windows-11-arm
@@ -91,7 +97,7 @@ jobs:
         run: |
           for i in 1 2 3; do
             sudo apt-get update
-            sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev libegl1 && exit 0
+            sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev libegl1 libegl-dev xvfb && exit 0
             echo "apt attempt $i failed; retrying in 20s" && sleep 20
           done
           exit 1
@@ -147,10 +153,22 @@ jobs:
         with:
           name: kover-coverage
           path: build/reports/kover/
-      - name: Build desktop sample
+      - name: Build desktop samples
         working-directory: samples
         shell: bash
-        run: ./gradlew :desktopApp:compileKotlinJvm --no-configuration-cache
+        run: ./gradlew :desktopApp:compileKotlinJvm :nucleusApp:compileKotlinJvm --no-configuration-cache
+      # Runs the Nucleus sample and checks frames reach the window through the GPU surface.
+      # Only where the runner can: Metal on Apple-silicon macOS, Mesa (llvmpipe) EGL under Xvfb
+      # on Linux. Intel macOS / Windows runners have no usable GPU for it.
+      - name: Nucleus GPU surface smoke test
+        if: matrix.nucleus-surface
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = Linux ]; then
+            xvfb-run -a -s "-screen 0 1920x1080x24" scripts/dev/smoke-nucleus.sh ${{ matrix.nucleus-surface }}
+          else
+            scripts/dev/smoke-nucleus.sh ${{ matrix.nucleus-surface }}
+          fi
       - name: Upload test reports
         if: failure()
         uses: actions/upload-artifact@v7

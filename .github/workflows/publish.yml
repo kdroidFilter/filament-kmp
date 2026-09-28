@@ -35,9 +35,11 @@ jobs:
           - os: ubuntu-latest
             target: linuxX64
             arch: linux-x64
+            from-source: true
           - os: ubuntu-24.04-arm
             target: linuxArm64
             arch: linux-arm64
+            from-source: true
           - os: windows-latest
             target: mingwX64
             arch: windows-x64
@@ -54,7 +56,7 @@ jobs:
       - uses: ./.github/actions/setup-gradle-cached
       - name: Install C++ deps (Linux)
         if: runner.os == 'Linux'
-        run: sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev
+        run: sudo apt-get install -y clang libc++-dev libc++abi-dev libgl-dev libegl-dev
       - name: Read Filament version
         id: ver
         shell: bash

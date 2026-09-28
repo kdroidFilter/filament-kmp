@@ -27,6 +27,13 @@ internal object SurfaceStats {
         }
     }
 
+    private val reported = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
+
+    /** Prints which surface implementation rendered, once per kind: `filament-surface=<kind>`. */
+    fun surface(kind: String) {
+        if (enabled && reported.add(kind)) println("filament-surface=$kind")
+    }
+
     fun frameDelivered() {
         if (enabled) frames.incrementAndGet()
     }

@@ -170,12 +170,19 @@ internal actual fun FilamentSurface(
     renderingEnabled: Boolean,
     onResize: (aspect: Double) -> Unit,
 ) {
-    // Inside a Nucleus (Tao) Metal window, render on the window's GPU instead of reading back.
-    if (nucleusGpuEnabled && engine.backend == Engine.Backend.METAL) {
-        val metalDevice = rememberNucleusMetalDevice()
-        if (metalDevice != 0L) {
-            NucleusMetalFilamentSurface(modifier, engine, renderer, view, metalDevice, onResize)
+    // Inside a Nucleus (Tao) window, render on the window's GPU instead of reading back.
+    if (nucleusGpuEnabled) {
+        val glHost = NucleusGl.hostOf(engine)
+        if (glHost != null) {
+            NucleusGlFilamentSurface(modifier, engine, renderer, view, glHost, onResize)
             return
+        }
+        if (engine.backend == Engine.Backend.METAL) {
+            val metalDevice = rememberNucleusMetalDevice()
+            if (metalDevice != 0L) {
+                NucleusMetalFilamentSurface(modifier, engine, renderer, view, metalDevice, onResize)
+                return
+            }
         }
     }
 
@@ -253,6 +260,7 @@ internal actual fun FilamentSurface(
             s.readback.adoptPublished(display.slot)?.let { slot ->
                 display.slot = slot
                 displayedImage = slot.image
+                SurfaceStats.surface("readback")
                 SurfaceStats.frameDelivered()
             }
             if (renderer.beginFrame(s.swapChain, frameTime)) {

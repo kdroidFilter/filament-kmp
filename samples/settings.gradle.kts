@@ -14,11 +14,11 @@ rootProject.name = "Samples"
 includeBuild("../") {
     name = "filament-umbrella"
     dependencySubstitution {
-        substitute(module("io.github.erkko68.filament:filament")).using(project(":kotlin:filament"))
-        substitute(module("io.github.erkko68.filament:filamat")).using(project(":kotlin:filamat"))
-        substitute(module("io.github.erkko68.filament:gltfio")).using(project(":kotlin:gltfio"))
-        substitute(module("io.github.erkko68.filament:filament-utils")).using(project(":kotlin:filament-utils"))
-        substitute(module("io.github.erkko68.filament:filament-compose")).using(project(":kotlin:filament-compose"))
+        substitute(module("dev.nucleusframework.filament:filament")).using(project(":kotlin:filament"))
+        substitute(module("dev.nucleusframework.filament:filamat")).using(project(":kotlin:filamat"))
+        substitute(module("dev.nucleusframework.filament:gltfio")).using(project(":kotlin:gltfio"))
+        substitute(module("dev.nucleusframework.filament:filament-utils")).using(project(":kotlin:filament-utils"))
+        substitute(module("dev.nucleusframework.filament:filament-compose")).using(project(":kotlin:filament-compose"))
     }
 }
 

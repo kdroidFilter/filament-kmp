@@ -6,7 +6,7 @@ android-targetSdk = "36"
 androidx-activity = "1.13.0"
 annotations = "26.1.0"
 composeMultiplatform = "1.12.0"
-filament = "0.6.0"
+filament = "0.6.1"
 junit = "4.13.2"
 kotlin = "2.4.10"
 kotlinx-coroutines = "1.11.0"
@@ -17,11 +17,11 @@ nucleus = "2.6.0-dev-202609271939"
 [libraries]
 nucleus-application = { module = "dev.nucleusframework:nucleus.nucleus-application", version.ref = "nucleus" }
 annotations = { module = "org.jetbrains:annotations", version.ref = "annotations" }
-filament = { module = "io.github.erkko68.filament:filament", version.ref = "filament" }
-filament-compose = { module = "io.github.erkko68.filament:filament-compose", version.ref = "filament" }
-filamat = { module = "io.github.erkko68.filament:filamat", version.ref = "filament" }
-utils = { module = "io.github.erkko68.filament:filament-utils", version.ref = "filament" }
-gltfio = { module = "io.github.erkko68.filament:gltfio", version.ref = "filament" }
+filament = { module = "dev.nucleusframework.filament:filament", version.ref = "filament" }
+filament-compose = { module = "dev.nucleusframework.filament:filament-compose", version.ref = "filament" }
+filamat = { module = "dev.nucleusframework.filament:filamat", version.ref = "filament" }
+utils = { module = "dev.nucleusframework.filament:filament-utils", version.ref = "filament" }
+gltfio = { module = "dev.nucleusframework.filament:gltfio", version.ref = "filament" }
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 junit = { module = "junit:junit", version.ref = "junit" }

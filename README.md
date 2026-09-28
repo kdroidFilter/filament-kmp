@@ -1,6 +1,6 @@
 # Filament KMP
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.github.erkko68.filament/filament-compose?label=Maven%20Central&color=blue)](https://central.sonatype.com/namespace/io.github.erkko68.filament)
+[![Maven Central](https://img.shields.io/maven-central/v/io.github.erkko68.filament/filament-compose?label=Maven%20Central&color=blue)](https://central.sonatype.com/namespace/dev.nucleusframework.filament)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE.md)
 [![Filament](https://img.shields.io/badge/Filament-1.77.1-orange)](https://github.com/google/filament)
 [![Kotlin](https://img.shields.io/badge/Kotlin-Multiplatform-7F52FF?logo=kotlin)](https://kotlinlang.org/docs/multiplatform.html)
@@ -76,8 +76,8 @@ dependencyResolutionManagement {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            // Compose integration (pulls in the engine), or just "…:filament:0.6.0" without Compose.
-            implementation("io.github.erkko68.filament:filament-compose:0.6.0")
+            // Compose integration (pulls in the engine), or just "…:filament:0.6.1" without Compose.
+            implementation("dev.nucleusframework.filament:filament-compose:0.6.1")
         }
     }
 }
@@ -97,7 +97,7 @@ For the full setup (Compose Multiplatform plugin, FFM native runtime for Desktop
 | `filamat` | Runtime material compilation — `MaterialBuilder`. |
 | `filament-utils` | Camera manipulators, HDR/KTX loaders, math helpers. |
 
-All published under `io.github.erkko68.filament`. The Desktop/JVM bindings (Project Panama / FFM) ship as `io.github.erkko68.filament-ffm:filament-ffm` and are pulled in automatically, with the natives in per-platform `filament-ffm-runtime-<os>-<arch>` jars — all of them by default, or only your platform's if your build declares os/arch attributes (see [java/README.md](java/README.md)). See **[Modules](docs/modules.md)** for full coordinates and dependency graph.
+All published under `dev.nucleusframework.filament`. The Desktop/JVM bindings (Project Panama / FFM) ship as `dev.nucleusframework.filament-ffm:filament-ffm` and are pulled in automatically, with the natives in per-platform `filament-ffm-runtime-<os>-<arch>` jars — all of them by default, or only your platform's if your build declares os/arch attributes (see [java/README.md](java/README.md)). See **[Modules](docs/modules.md)** for full coordinates and dependency graph.
 
 ## Versioning & stability
 
@@ -107,7 +107,7 @@ Releases are plain `X.Y.Z` (no pre-release suffixes since `0.2.0`):
 - **`X.Y.Z` (patch)** — no API surface change: bug fixes in the wrapper, and upstream point releases picked up without binding anything new. Safe to pick up without reading anything.
 - **`X.0.0` (major)** — reserved for maturity milestones and very large changes (a stabilized public API, a full architectural rework). Routine upstream tracking never triggers a major bump — expect minor releases to keep flowing for as long as Filament keeps releasing.
 
-All `io.github.erkko68.filament:*` artifacts share one version and must be upgraded together. The project is actively maintained long-term and tracks upstream Filament releases as they are published (see [docs/upgrading-filament.md](docs/upgrading-filament.md) for the process). Larger technical direction — like zero-copy GPU sharing with Compose — lives in the [Roadmap](ROADMAP.md).
+All `dev.nucleusframework.filament:*` artifacts share one version and must be upgraded together. The project is actively maintained long-term and tracks upstream Filament releases as they are published (see [docs/upgrading-filament.md](docs/upgrading-filament.md) for the process). Larger technical direction — like zero-copy GPU sharing with Compose — lives in the [Roadmap](ROADMAP.md).
 
 ## API strategy
 

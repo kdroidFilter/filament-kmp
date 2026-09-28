@@ -72,7 +72,7 @@ dependencies {
 // projects created by `include(":kotlin:filament")` — carries valid coordinates,
 // so nothing accidentally publishes with group = rootProject.name.
 allprojects {
-    val baseGroup = project.findProperty("projectGroup") as? String ?: "io.github.erkko68.filament"
+    val baseGroup = project.findProperty("projectGroup") as? String ?: "dev.nucleusframework.filament"
     group = if (path.startsWith(":java")) {
         // The :java module carries the JVM native runtime (Project Panama/FFM),
         // published as the `filament-ffm` artifact under a matching `-ffm` group.

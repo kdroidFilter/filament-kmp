@@ -1,7 +1,7 @@
 # `:jni` — JNI bindings over the `Fila*` C API
 
 The JNI counterpart of [`java/`](../java/README.md) (FFM) and [`web/`](../web/README.md) (wasm): binds the `Fila*`
-C API in [`c/`](../c) through JNI. Published as **`io.github.erkko68.filament:filament-jni`**, a plain Kotlin/JVM jar
+C API in [`c/`](../c) through JNI. Published as **`dev.nucleusframework.filament:filament-jni`**, a plain Kotlin/JVM jar
 at the Android bytecode floor (Java 11), so nothing in it needs a recent JDK.
 
 It holds sources only, no native library. Each JNI runtime compiles `src/main/cpp` into its `libfilament-c`:

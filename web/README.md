@@ -4,7 +4,7 @@ The web counterpart of [`:java`](../java/README.md). It builds the same C wrappe
 with Emscripten and exposes it to the `js` and `wasmJs` targets through Kotlin externals generated
 from the C headers. There is no embind and no upstream `filament.js`.
 
-Published as **`io.github.erkko68.filament:web`** and pulled in transitively by every
+Published as **`dev.nucleusframework.filament:web`** and pulled in transitively by every
 `:kotlin:*` web target, so consumers never add it by hand. The `.js`/`.wasm` files are **not**
 inside the klib (webpack never sees klib resources); apps download them from the GitHub release
 (see [getting started](../docs/getting-started.md)).

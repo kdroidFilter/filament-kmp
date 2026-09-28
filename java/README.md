@@ -5,7 +5,7 @@ This is the single module that binds Filament on the **JVM/Desktop** target. It 
 combined C wrapper directly — no JNI. Android binds the same C wrapper through JNI instead,
 in [`android/`](../android/README.md).
 
-Published as **`io.github.erkko68.filament-ffm:filament-ffm`** and pulled in transitively
+Published as **`dev.nucleusframework.filament-ffm:filament-ffm`** and pulled in transitively
 by every `:kotlin:*` JVM target (each declares `api(project(":java"))` in its `jvmMain`),
 so consumers never add it by hand.
 
@@ -94,7 +94,7 @@ along:
 
 ```kotlin
 dependencies {
-    implementation("io.github.erkko68.filament-ffm:filament-ffm-runtime-macos-arm64:<version>")
+    implementation("dev.nucleusframework.filament-ffm:filament-ffm-runtime-macos-arm64:<version>")
 }
 ```
 

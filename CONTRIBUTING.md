@@ -89,7 +89,7 @@ Mirroring the API is not the same as mirroring the Java. Two deliberate rules:
 ## Versioning & releases
 
 Versions are plain `X.Y.Z` (no pre-release suffixes since `0.2.0`), and all
-`io.github.erkko68.filament:*` artifacts share one version:
+`dev.nucleusframework.filament:*` artifacts share one version:
 
 - **minor (`0.X.0`)** — a new upstream Filament feature release (1.73 → 1.74) plus any
   wrapper API changes since the last one; pre-1.0, breaking changes may land here.

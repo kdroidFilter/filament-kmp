@@ -31,16 +31,16 @@ Most apps want **`filament-compose`** — it pulls in the core renderer and the 
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("io.github.erkko68.filament:filament-compose:0.6.0")
+            implementation("dev.nucleusframework.filament:filament-compose:0.6.1")
 
             // Optional: glTF / GLB model loading
-            implementation("io.github.erkko68.filament:gltfio:0.6.0")
+            implementation("dev.nucleusframework.filament:gltfio:0.6.1")
 
             // Optional: math helpers, HDR/KTX loaders, camera manipulators
-            implementation("io.github.erkko68.filament:filament-utils:0.6.0")
+            implementation("dev.nucleusframework.filament:filament-utils:0.6.1")
 
             // Optional: runtime material compilation (most apps don't need this)
-            implementation("io.github.erkko68.filament:filamat:0.6.0")
+            implementation("dev.nucleusframework.filament:filamat:0.6.1")
         }
     }
 }
@@ -57,7 +57,7 @@ See **[Modules](modules.md)** for the full coordinates list, the per-target depe
 
 ### Android
 
-No extra configuration. The native runtime (`io.github.erkko68.filament:filament-jni-android`, `libfilament-c.so` for arm64-v8a, armeabi-v7a, x86_64 and x86) is pulled in transitively. The minimum supported `compileSdk` is **37** (required by Filament 1.76.0).
+No extra configuration. The native runtime (`dev.nucleusframework.filament:filament-jni-android`, `libfilament-c.so` for arm64-v8a, armeabi-v7a, x86_64 and x86) is pulled in transitively. The minimum supported `compileSdk` is **37** (required by Filament 1.76.0).
 
 ```kotlin
 // androidApp/build.gradle.kts
@@ -119,7 +119,7 @@ struct ContentView: View {
 
 ### JVM / Desktop
 
-The Compose Desktop plugin handles the rest. The native runtime — a Project Panama (FFM) module, `io.github.erkko68.filament-ffm:filament-ffm:...` — is pulled in automatically as a Gradle metadata dependency, so there's no manual classifier setup. It requires a **JDK 22+** runtime (the FFM API floor).
+The Compose Desktop plugin handles the rest. The native runtime — a Project Panama (FFM) module, `dev.nucleusframework.filament-ffm:filament-ffm:...` — is pulled in automatically as a Gradle metadata dependency, so there's no manual classifier setup. It requires a **JDK 22+** runtime (the FFM API floor).
 
 ```kotlin
 // desktopApp/build.gradle.kts

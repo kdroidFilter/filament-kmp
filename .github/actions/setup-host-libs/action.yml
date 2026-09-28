@@ -18,7 +18,7 @@ runs:
     # restore/save split: saving right after the build keeps it even if a later step fails.
     # The fallback restore-key reuses the latest build for this target: the script's stamp
     # fingerprints the target's own recipe and only rebuilds when that changed, so editing the
-    # script for one target doesn't rebuild the others (hours for macosX64).
+    # script for one target doesn't rebuild the others (a full Filament build each).
     - id: libs
       uses: actions/cache/restore@v6
       with:

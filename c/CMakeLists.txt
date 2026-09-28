@@ -461,6 +461,9 @@ if (FILAMENT_BUILD_SHARED)
         # backend on GLES through EGL; Interop.cpp then offers the host-display EGL share.
         if (EXISTS "${FILAMENT_LIB_DIR}/../egl")
             target_compile_definitions(filament-c-jvm PRIVATE FILA_EGL_PLATFORM=1)
+            # Interop.cpp subclasses PlatformEGLHeadless; Filament is built without RTTI, so the
+            # subclass must be too or it references a base typeinfo that doesn't exist.
+            set_source_files_properties(filament/cpp/Interop.cpp PROPERTIES COMPILE_OPTIONS -fno-rtti)
             target_link_libraries(filament-c-jvm PRIVATE EGL GLESv2)
         endif()
         # With the version-script seal below, gc-sections drops code unreachable from

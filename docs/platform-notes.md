@@ -75,7 +75,7 @@ When the app runs on [Nucleus](https://nucleusframework.dev) (2.6+, Tao backend)
 
 Requirements: the engine from `rememberFilamentEngine()` (the default of `FilamentSceneView`) — on Linux/Windows it is created on the window's GL context, so a hand-built `Engine` or an explicit non-GL backend keeps the readback path there. Linux needs the EGL-enabled Filament libs the release ships (`scripts/dev/build-host-libs.sh linuxX64` for local builds; the upstream GLX tarball keeps readback).
 
-On an Apple M4 at 1280×800 dp (`scripts/dev/bench-desktop.sh`), the GPU path delivers every display frame (60 fps where readback reaches 30) at equal or lower process CPU.
+On an Apple M4 at 1280×800 dp, both paths capped at 30 fps (`scripts/dev/bench-desktop.sh duck 20 nucleus-gpu@30 nucleus-offscreen`), the GPU path uses about half the process CPU (median 25 % vs 57 % of a core); uncapped it also delivers every display frame (60 fps where readback reaches 30).
 
 ### Native library loading
 

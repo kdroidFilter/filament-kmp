@@ -13,6 +13,11 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-09-29
+
+> [!WARNING]
+> **Desktop runtime renamed** — `dev.nucleusframework.filament-ffm:filament-ffm*` is replaced by `dev.nucleusframework.filament:filament-jni-desktop` + `filament-jni-runtime-<os>-<arch>`, pulled in transitively; only builds that name a runtime jar directly need updating. The JVM floor drops to 17.
+
 Synced with upstream's move of every API class to common code over JNI (desktop, Android) / wasm (web) / direct symbols (iOS).
 
 ### Changed
@@ -23,6 +28,8 @@ Synced with upstream's move of every API class to common code over JNI (desktop,
 - **`./gradlew apiGaps`** (build): reports the Filament C++ API `c/` doesn't call (clang's AST + linker symbols, inline methods included) and `Fila*` functions without a Kotlin external; replaces `check-common-api.sh`.
 
 ### Fixed
+- **Crash when a scene's composition is recycled or discarded** (`filament-compose`): a LazyColumn item (or any SubcomposeLayout) holding a scene could destroy its engine, materials or material instances in the wrong order, or leak them from a discarded pass, and Filament aborted the JVM (`destroying material ... but 1 instances still alive`, `destroying MaterialInstance ... still in use by Renderable`). Engines, materials, instances, meshes and glTF assets now go with their last user, whether their composition is forgotten or abandoned.
+- **Uncaught Filament panics are reported** (JVM, Android): before the process aborts, the panic's message and the calling thread's Java stack go to stderr instead of just the exception type.
 - **Compressed `Texture.InternalFormat`s (ETC2, DXT, ASTC, RGTC, BPTC) were silently created as `RGBA8`** on every platform; they now reach Filament.
 
 ## [0.6.2] — 2026-09-29
@@ -515,7 +522,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.2...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.3...HEAD
+[0.6.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.2...0.6.3
 [0.6.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.1...0.6.2
 [0.6.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/Erkko68/filament-kmp/compare/0.5.0...0.6.0

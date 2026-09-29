@@ -76,8 +76,8 @@ dependencyResolutionManagement {
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            // Compose integration (pulls in the engine), or just "…:filament:0.6.2" without Compose.
-            implementation("dev.nucleusframework.filament:filament-compose:0.6.2")
+            // Compose integration (pulls in the engine), or just "…:filament:0.6.3" without Compose.
+            implementation("dev.nucleusframework.filament:filament-compose:0.6.3")
         }
     }
 }

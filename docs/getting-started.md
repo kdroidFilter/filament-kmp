@@ -31,16 +31,16 @@ Most apps want **`filament-compose`** — it pulls in the core renderer and the 
 kotlin {
     sourceSets {
         commonMain.dependencies {
-            implementation("dev.nucleusframework.filament:filament-compose:0.6.2")
+            implementation("dev.nucleusframework.filament:filament-compose:0.6.3")
 
             // Optional: glTF / GLB model loading
-            implementation("dev.nucleusframework.filament:gltfio:0.6.2")
+            implementation("dev.nucleusframework.filament:gltfio:0.6.3")
 
             // Optional: math helpers, HDR/KTX loaders, camera manipulators
-            implementation("dev.nucleusframework.filament:filament-utils:0.6.2")
+            implementation("dev.nucleusframework.filament:filament-utils:0.6.3")
 
             // Optional: runtime material compilation (most apps don't need this)
-            implementation("dev.nucleusframework.filament:filamat:0.6.2")
+            implementation("dev.nucleusframework.filament:filamat:0.6.3")
         }
     }
 }

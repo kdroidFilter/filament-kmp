@@ -73,11 +73,8 @@ internal object NucleusGl {
 @Composable
 internal fun rememberNucleusGlHost(): NucleusGlHost? {
     val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext ?: return null
-    val host = remember(context) { runCatching { createHost(context) }.getOrNull() }
-    DisposableEffect(host) {
-        onDispose { host?.close() }
-    }
-    return host
+    // Closed by rememberPlatformEngine, with the engine created on it.
+    return remember(context) { runCatching { createHost(context) }.getOrNull() }
 }
 
 private fun createHost(context: TaoOpenGlRenderContext): NucleusGlHost? {

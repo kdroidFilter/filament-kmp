@@ -29,8 +29,12 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
     }
     DisposableEffect(engine) {
         onDispose {
-            NucleusGl.unbind(engine)
-            engine.destroy()
+            // The window's GL share goes with the engine created on it, not before (see EngineLifetimes).
+            EngineLifetimes.destroyWhenUnused(engine) {
+                NucleusGl.unbind(engine)
+                engine.destroy()
+                host.close()
+            }
         }
     }
     return engine

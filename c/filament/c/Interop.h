@@ -25,6 +25,8 @@ typedef struct FilaGpuShare FilaGpuShare;
 // platform, driver or Filament build cannot do it.
 FilaGpuShare* FilaGpuShare_create(void* hostEglDisplay);
 void FilaGpuShare_destroy(FilaGpuShare* share);
+// Linux: the EGLDisplay of the calling thread's current context (the host's, while it is current). NULL elsewhere.
+void* FilaGpuShare_currentEglDisplay(void);
 
 // Configures the builder to render on the share's device: OpenGL backend, shared context and,
 // on Linux, the host's EGLDisplay. The share must outlive the engine.
@@ -41,6 +43,13 @@ void* FilaGpuTexture_handle(FilaGpuTexture* texture);
 bool FilaGpuTexture_lock(FilaGpuTexture* texture);
 bool FilaGpuTexture_unlock(FilaGpuTexture* texture);
 void FilaGpuTexture_destroy(FilaGpuTexture* texture);
+
+// macOS: an RGBA8 render-target id<MTLTexture> on the host's device (the host samples it in place),
+// +1 retained; balance with FilaMetalTexture_release. NULL elsewhere. Filament's texture import
+// adopts a +1 reference, so take one with FilaMetalTexture_retain before handing it over.
+void* FilaMetalTexture_create(void* mtlDevice, int32_t width, int32_t height);
+void FilaMetalTexture_retain(void* mtlTexture);
+void FilaMetalTexture_release(void* mtlTexture);
 
 #ifdef __cplusplus
 }

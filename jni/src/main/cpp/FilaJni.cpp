@@ -4,7 +4,9 @@
 #include <jni.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
+#include <exception>
 
 #ifdef __ANDROID__
 // Private upstream header (backend/include/private/backend/VirtualMachineEnv.h); only this entry is needed.
@@ -19,10 +21,36 @@ public:
 static JavaVM* sVm = nullptr;
 static jmethodID sInvoke = nullptr; // FilaCallback.invoke(long, long)
 
+// A Filament panic thrown under a JNI method can't be caught on the way out (the forwarders are C), so the
+// process terminates. Say what failed and from where first: the panic's message (function, line, reason)
+// and the Java stack of the thread that called into Filament.
+[[noreturn]] static void reportUncaughtException() {
+    if (std::exception_ptr current = std::current_exception()) {
+        try {
+            std::rethrow_exception(current);
+        } catch (const std::exception& e) {
+            std::fprintf(stderr, "filament-kmp: uncaught native exception: %s\n", e.what());
+        } catch (...) {
+            std::fprintf(stderr, "filament-kmp: uncaught native exception of unknown type\n");
+        }
+    }
+    JNIEnv* env;
+    if (sVm && sVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) == JNI_OK) {
+        if (jclass thread = env->FindClass("java/lang/Thread")) {
+            if (jmethodID dumpStack = env->GetStaticMethodID(thread, "dumpStack", "()V")) {
+                env->CallStaticVoidMethod(thread, dumpStack);
+            }
+        }
+    }
+    std::fflush(stderr);
+    std::abort();
+}
+
 extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
     JNIEnv* env;
     if (vm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) return -1;
     sVm = vm;
+    std::set_terminate(reportUncaughtException);
 #ifdef __ANDROID__
     // Filament's Android backend (streams, EGL helpers) needs the VM, as in upstream filament-android.
     filament::VirtualMachineEnv::JNI_OnLoad(vm);
@@ -37,7 +65,11 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
 static JNIEnv* attachedEnv() {
     JNIEnv* env;
     if (sVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6) != JNI_OK) {
+#ifdef __ANDROID__
         sVm->AttachCurrentThreadAsDaemon(&env, nullptr);
+#else
+        sVm->AttachCurrentThreadAsDaemon(reinterpret_cast<void**>(&env), nullptr); // desktop jni.h takes void**
+#endif
     }
     return env;
 }
@@ -86,10 +118,6 @@ FILA_JNI(void, free)(JNIEnv*, jclass, jlong ptr) {
     std::free(reinterpret_cast<void*>(ptr));
 }
 
-FILA_JNI(jlong, address)(JNIEnv* env, jclass, jobject buffer) {
-    return reinterpret_cast<jlong>(env->GetDirectBufferAddress(buffer));
-}
-
 FILA_JNI(jobject, view)(JNIEnv* env, jclass, jlong ptr, jlong size) {
     return env->NewDirectByteBuffer(reinterpret_cast<void*>(ptr), size);
 }
@@ -106,18 +134,6 @@ FILA_JNI(jlong, userOnly)(JNIEnv*, jclass) { return reinterpret_cast<jlong>(&use
 FILA_JNI(jlong, argUser)(JNIEnv*, jclass) { return reinterpret_cast<jlong>(&argUser); }
 FILA_JNI(jlong, keepBuffer)(JNIEnv*, jclass) { return reinterpret_cast<jlong>(&keepBuffer); }
 FILA_JNI(jlong, freeBuffer)(JNIEnv*, jclass) { return reinterpret_cast<jlong>(&freeBuffer); }
-
-// Peek/poke for the pointer-based views (F32Array, IntVar, ...), matching :web's fila.getF32 & co.
-#define FILA_PEEK(name, jtype, ctype) \
-    FILA_JNI(jtype, get##name)(JNIEnv*, jclass, jlong ptr) { return static_cast<jtype>(*reinterpret_cast<const ctype*>(ptr)); } \
-    FILA_JNI(void, set##name)(JNIEnv*, jclass, jlong ptr, jtype value) { *reinterpret_cast<ctype*>(ptr) = static_cast<ctype>(value); }
-FILA_PEEK(F32, jfloat, float)
-FILA_PEEK(F64, jdouble, double)
-FILA_PEEK(I32, jint, int32_t)
-FILA_PEEK(I64, jlong, int64_t)
-FILA_PEEK(U8, jint, uint8_t)
-
-FILA_JNI(jint, pointerSize)(JNIEnv*, jclass) { return sizeof(void*); }
 
 FILA_JNI(jstring, readString)(JNIEnv* env, jclass, jlong ptr) {
     return ptr ? env->NewStringUTF(reinterpret_cast<const char*>(ptr)) : nullptr;

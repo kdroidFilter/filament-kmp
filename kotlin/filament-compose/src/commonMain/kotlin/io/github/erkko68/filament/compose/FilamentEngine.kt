@@ -27,7 +27,7 @@ internal expect fun rememberPlatformEngine(backend: Engine.Backend): Engine
 internal fun rememberDefaultEngine(backend: Engine.Backend): Engine {
     val engine = remember(backend) { Filament.init(); Engine.create(backend) }
     DisposableEffect(engine) {
-        onDispose { engine.destroy() }
+        onDispose { EngineLifetimes.destroyWhenUnused(engine) }
     }
     return engine
 }

@@ -66,6 +66,8 @@ struct FilaGpuTexture {
     EGLImageKHR image = EGL_NO_IMAGE_KHR;
 };
 
+void* FilaGpuShare_currentEglDisplay() { return eglGetCurrentDisplay(); }
+
 FilaGpuShare* FilaGpuShare_create(void* hostEglDisplay) {
     auto* s = new (std::nothrow) FilaGpuShare();
     if (!s || !hostEglDisplay) {
@@ -213,6 +215,8 @@ struct FilaGpuTexture {
     HANDLE interopObject = nullptr;
 };
 
+void* FilaGpuShare_currentEglDisplay() { return nullptr; }
+
 FilaGpuShare* FilaGpuShare_create(void*) {
     auto* s = new (std::nothrow) FilaGpuShare();
     if (!s) return nullptr;
@@ -341,9 +345,10 @@ void FilaGpuTexture_destroy(FilaGpuTexture* t) {
     delete t;
 }
 
-// ── Elsewhere (macOS uses Metal textures directly, see NucleusMetalSurface.jvm.kt) ───────────
+// ── Elsewhere (macOS shares Metal textures instead, see FilaMetalTexture below) ──────────────
 #else
 
+void* FilaGpuShare_currentEglDisplay() { return nullptr; }
 FilaGpuShare* FilaGpuShare_create(void*) { return nullptr; }
 void FilaGpuShare_destroy(FilaGpuShare*) {}
 void FilaEngineBuilder_gpuShare(FilaEngineBuilder*, FilaGpuShare*) {}
@@ -353,5 +358,49 @@ void* FilaGpuTexture_handle(FilaGpuTexture*) { return nullptr; }
 bool FilaGpuTexture_lock(FilaGpuTexture*) { return false; }
 bool FilaGpuTexture_unlock(FilaGpuTexture*) { return false; }
 void FilaGpuTexture_destroy(FilaGpuTexture*) {}
+
+#endif
+
+// ── macOS/iOS: Metal textures on the host's MTLDevice ────────────────────────────────────────
+#if defined(__APPLE__)
+
+#include <objc/message.h>
+#include <objc/runtime.h>
+
+namespace {
+constexpr long kPixelFormatRGBA8Unorm = 70;              // MTLPixelFormatRGBA8Unorm
+constexpr long kUsageShaderReadRenderTarget = 0x1 | 0x4; // MTLTextureUsageShaderRead | RenderTarget
+constexpr long kStorageModePrivate = 2;                  // MTLStorageModePrivate
+
+// objc_msgSend must be called through each method's exact prototype.
+template<typename R, typename... A>
+R send(id receiver, const char* selector, A... args) {
+    return reinterpret_cast<R (*)(id, SEL, A...)>(objc_msgSend)(receiver, sel_registerName(selector), args...);
+}
+}
+
+void* FilaMetalTexture_create(void* device, int32_t width, int32_t height) {
+    if (!device || width <= 0 || height <= 0) return nullptr;
+    id descriptor = send<id>(reinterpret_cast<id>(objc_getClass("MTLTextureDescriptor")),
+            "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
+            kPixelFormatRGBA8Unorm, static_cast<unsigned long>(width), static_cast<unsigned long>(height), false);
+    send<void>(descriptor, "setUsage:", kUsageShaderReadRenderTarget);
+    send<void>(descriptor, "setStorageMode:", kStorageModePrivate);
+    return send<id>(static_cast<id>(device), "newTextureWithDescriptor:", descriptor);
+}
+
+void FilaMetalTexture_retain(void* texture) {
+    if (texture) send<id>(static_cast<id>(texture), "retain");
+}
+
+void FilaMetalTexture_release(void* texture) {
+    if (texture) send<void>(static_cast<id>(texture), "release");
+}
+
+#else
+
+void* FilaMetalTexture_create(void*, int32_t, int32_t) { return nullptr; }
+void FilaMetalTexture_retain(void*) {}
+void FilaMetalTexture_release(void*) {}
 
 #endif

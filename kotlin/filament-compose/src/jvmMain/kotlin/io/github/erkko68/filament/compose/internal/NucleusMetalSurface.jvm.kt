@@ -23,14 +23,6 @@ import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
 import io.github.erkko68.filament.View
 import io.github.erkko68.filament.Viewport
-import java.lang.foreign.Arena
-import java.lang.foreign.FunctionDescriptor
-import java.lang.foreign.Linker
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.SymbolLookup
-import java.lang.foreign.ValueLayout.ADDRESS
-import java.lang.foreign.ValueLayout.JAVA_BYTE
-import java.lang.foreign.ValueLayout.JAVA_LONG
 
 // GPU path for apps running on Nucleus (https://nucleusframework.dev) with its Tao backend:
 // Filament renders straight into an MTLTexture on the window's own Metal device and Nucleus's
@@ -132,71 +124,15 @@ internal fun NucleusMetalFilamentSurface(
 
 /** One MTLTexture shared with Nucleus, imported into Filament as the color attachment. */
 private class MetalTarget(engine: Engine, device: Long, size: IntSize) {
-    val mtlTexture: Long = MetalTextures.create(device, size.width, size.height)
+    val mtlTexture: Long = FilaMetalTexture_create(device, size.width, size.height)
+        .also { check(it != 0L) { "MTLDevice newTextureWithDescriptor failed (${size.width}x${size.height})" } }
     val source: TextureViewSource = nucleusMetalTextureSource(mtlTexture, size.width, size.height)
     // Filament adopts a +1 reference on import (CFBridgingRelease); ours stays for Nucleus.
-    private val target = ImportedRenderTarget(engine, MetalTextures.retain(mtlTexture), size)
+    private val target = ImportedRenderTarget(engine, mtlTexture.also(::FilaMetalTexture_retain), size)
     val renderTarget: RenderTarget get() = target.renderTarget
 
     fun destroy(engine: Engine) {
         target.destroy(engine)
-        MetalTextures.release(mtlTexture)
+        FilaMetalTexture_release(mtlTexture)
     }
-}
-
-/**
- * `id<MTLTexture>` allocation through the Objective-C runtime via FFM, so this needs no native
- * code of its own. Metal is already loaded in-process (by Filament and Nucleus).
- */
-private object MetalTextures {
-    private const val PIXEL_FORMAT_RGBA8_UNORM = 70L
-    private const val USAGE_SHADER_READ_RENDER_TARGET = 0x1L or 0x4L
-    private const val STORAGE_MODE_PRIVATE = 2L
-
-    private val linker = Linker.nativeLinker()
-    private val objc = SymbolLookup.libraryLookup("/usr/lib/libobjc.A.dylib", Arena.global())
-    private val msgSend = objc.find("objc_msgSend").orElseThrow()
-
-    private val getClass = downcall(objc.find("objc_getClass").orElseThrow(), FunctionDescriptor.of(ADDRESS, ADDRESS))
-    private val registerSel = downcall(objc.find("sel_registerName").orElseThrow(), FunctionDescriptor.of(ADDRESS, ADDRESS))
-    // objc_msgSend must be called through the exact prototype of each method.
-    private val sendDescriptor = downcall(msgSend, FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, JAVA_LONG, JAVA_LONG, JAVA_LONG, JAVA_BYTE))
-    private val sendSetLong = downcall(msgSend, FunctionDescriptor.ofVoid(ADDRESS, ADDRESS, JAVA_LONG))
-    private val sendObject = downcall(msgSend, FunctionDescriptor.of(ADDRESS, ADDRESS, ADDRESS, ADDRESS))
-    private val sendVoid = downcall(msgSend, FunctionDescriptor.ofVoid(ADDRESS, ADDRESS))
-
-    private val descriptorClass = Arena.ofConfined().use { getClass.invoke(it.allocateFrom("MTLTextureDescriptor")) as MemorySegment }
-    private val selDescriptor = sel("texture2DDescriptorWithPixelFormat:width:height:mipmapped:")
-    private val selSetUsage = sel("setUsage:")
-    private val selSetStorageMode = sel("setStorageMode:")
-    private val selNewTexture = sel("newTextureWithDescriptor:")
-    private val selRetain = sel("retain")
-    private val selRelease = sel("release")
-
-    /** A +1 retained RGBA8 render-target texture on [device]; balance with [release]. */
-    fun create(device: Long, width: Int, height: Int): Long {
-        val desc = sendDescriptor.invoke(
-            descriptorClass, selDescriptor, PIXEL_FORMAT_RGBA8_UNORM, width.toLong(), height.toLong(), 0.toByte(),
-        ) as MemorySegment
-        sendSetLong.invoke(desc, selSetUsage, USAGE_SHADER_READ_RENDER_TARGET)
-        sendSetLong.invoke(desc, selSetStorageMode, STORAGE_MODE_PRIVATE)
-        val texture = sendObject.invoke(MemorySegment.ofAddress(device), selNewTexture, desc) as MemorySegment
-        check(texture.address() != 0L) { "MTLDevice newTextureWithDescriptor failed (${width}x$height)" }
-        return texture.address()
-    }
-
-    fun retain(texture: Long): Long {
-        sendVoid.invoke(MemorySegment.ofAddress(texture), selRetain)
-        return texture
-    }
-
-    fun release(texture: Long) {
-        sendVoid.invoke(MemorySegment.ofAddress(texture), selRelease)
-    }
-
-    private fun sel(name: String): MemorySegment =
-        Arena.ofConfined().use { registerSel.invoke(it.allocateFrom(name)) as MemorySegment }
-
-    private fun downcall(symbol: MemorySegment, descriptor: FunctionDescriptor) =
-        linker.downcallHandle(symbol, descriptor)
 }

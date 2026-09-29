@@ -26,13 +26,7 @@ import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
 import io.github.erkko68.filament.View
 import io.github.erkko68.filament.Viewport
-import io.github.erkko68.filament.ffm.FilamentC
-import java.lang.foreign.Arena
-import java.lang.foreign.FunctionDescriptor
-import java.lang.foreign.Linker
-import java.lang.foreign.MemorySegment
-import java.lang.foreign.SymbolLookup
-import java.lang.foreign.ValueLayout.ADDRESS
+import io.github.erkko68.filament.interop.NativePointer
 import java.util.Collections
 import java.util.WeakHashMap
 
@@ -41,30 +35,30 @@ import java.util.WeakHashMap
 // directly, so c/filament/cpp/Interop.cpp gives it one it can share (FilaGpuShare) and textures
 // the window imports without a copy (FilaGpuTexture):
 //  - Linux: a GLES context on the window's EGLDisplay; textures go to Nucleus as EGLImages.
-//    Needs the EGL build of Filament (scripts/dev/build-host-libs.sh).
+//    Needs the EGL build of Filament (the Linux source recipe in build-logic).
 //  - Windows: a WGL context; textures alias D3D11 textures (WGL_NV_DX_interop2) that Nucleus
 //    opens by their DXGI shared handle.
 // Anything unavailable falls back to the readback path.
 
 /** A Nucleus GL window's texture-sharing setup for Filament. */
-internal class NucleusGlHost(val share: MemorySegment, val eglImages: Boolean) : AutoCloseable {
+internal class NucleusGlHost(val share: NativePointer, val eglImages: Boolean) : AutoCloseable {
 
     @OptIn(InternalFilamentApi::class)
     fun createEngine(): Engine? {
-        val builder = FilamentC.FilaEngineBuilder_create()
-        FilamentC.FilaEngineBuilder_gpuShare(builder, share)
-        val handle = FilamentC.FilaEngineBuilder_build(builder)
-        FilamentC.FilaEngineBuilder_destroy(builder)
-        return if (handle.address() == 0L) null else Engine(handle)
+        val builder = FilaEngineBuilder_create()
+        FilaEngineBuilder_gpuShare(builder, share)
+        val handle = FilaEngineBuilder_build(builder)
+        FilaEngineBuilder_destroy(builder)
+        return if (handle == 0L) null else Engine(handle)
     }
 
-    fun source(texture: MemorySegment, size: IntSize): TextureViewSource {
-        val handle = FilamentC.FilaGpuTexture_handle(texture).address()
+    fun source(texture: NativePointer, size: IntSize): TextureViewSource {
+        val handle = FilaGpuTexture_handle(texture)
         return if (eglImages) nucleusEglImageTextureSource(handle, size.width, size.height)
         else nucleusD3D11SharedTextureSource(handle, size.width, size.height)
     }
 
-    override fun close() = FilamentC.FilaGpuShare_destroy(share)
+    override fun close() = FilaGpuShare_destroy(share)
 }
 
 /** Engines created on a [NucleusGlHost], so their surfaces know to render there. */
@@ -89,9 +83,9 @@ internal fun rememberNucleusGlHost(): NucleusGlHost? {
 private fun createHost(context: TaoOpenGlRenderContext): NucleusGlHost? {
     val linux = System.getProperty("os.name").lowercase().contains("linux")
     // Linux shares the window's EGLDisplay, only readable while its context is current.
-    val display = if (linux) context.withContextCurrent { Egl.currentDisplay() } ?: return null else MemorySegment.NULL
-    val share = FilamentC.FilaGpuShare_create(display)
-    return if (share.address() == 0L) null else NucleusGlHost(share, eglImages = linux)
+    val display = if (linux) context.withContextCurrent { FilaGpuShare_currentEglDisplay() } ?: return null else 0L
+    val share = FilaGpuShare_create(display)
+    return if (share == 0L) null else NucleusGlHost(share, eglImages = linux)
 }
 
 /**
@@ -180,28 +174,18 @@ internal fun NucleusGlFilamentSurface(
 
 /** One shared texture imported into Filament, plus the window's view of it. */
 private class GlTarget(engine: Engine, host: NucleusGlHost, size: IntSize) {
-    private val texture: MemorySegment = FilamentC.FilaGpuTexture_create(host.share, size.width, size.height)
-        .also { check(it.address() != 0L) { "FilaGpuTexture_create failed (${size.width}x${size.height})" } }
-    private val target = ImportedRenderTarget(engine, FilamentC.FilaGpuTexture_glName(texture).toLong(), size)
+    private val texture: NativePointer = FilaGpuTexture_create(host.share, size.width, size.height)
+        .also { check(it != 0L) { "FilaGpuTexture_create failed (${size.width}x${size.height})" } }
+    private val target = ImportedRenderTarget(engine, FilaGpuTexture_glName(texture).toUInt().toLong(), size)
     val renderTarget: RenderTarget get() = target.renderTarget
     val source: TextureViewSource = host.source(texture, size)
 
     /** Windows: GL may only write while the D3D11 texture is locked for it. */
-    fun beforeRender(): Boolean = FilamentC.FilaGpuTexture_lock(texture)
-    fun afterRender() { FilamentC.FilaGpuTexture_unlock(texture) }
+    fun beforeRender(): Boolean = FilaGpuTexture_lock(texture)
+    fun afterRender() { FilaGpuTexture_unlock(texture) }
 
     fun destroy(engine: Engine) {
         target.destroy(engine)
-        FilamentC.FilaGpuTexture_destroy(texture)
+        FilaGpuTexture_destroy(texture)
     }
-}
-
-/** `eglGetCurrentDisplay`, via FFM: the window's EGLDisplay while its context is current. */
-private object Egl {
-    private val getDisplay = Linker.nativeLinker().downcallHandle(
-        SymbolLookup.libraryLookup("libEGL.so.1", Arena.global()).find("eglGetCurrentDisplay").orElseThrow(),
-        FunctionDescriptor.of(ADDRESS),
-    )
-
-    fun currentDisplay(): MemorySegment = getDisplay.invoke() as MemorySegment
 }

@@ -13,6 +13,18 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+Synced with upstream's move of every API class to common code over JNI (desktop, Android) / wasm (web) / direct symbols (iOS).
+
+### Changed
+- **Desktop runs on JNI instead of Project Panama (FFM)**: `filament-ffm*` (group `dev.nucleusframework.filament-ffm`) is replaced by `filament-jni-desktop` + `filament-jni-runtime-<os>-<arch>` (group `dev.nucleusframework.filament`, `macos-x64` included), `NativeSurface` takes the window as a `Long` address, and the JVM floor drops from 22 to **17**.
+- **Nucleus GPU surfaces** (`filament-compose`, JVM) call the C interop (`c/filament/c/Interop.h`) through JNI too, Metal texture allocation included: no Project Panama left on the JVM.
+
+### Added
+- **`./gradlew apiGaps`** (build): reports the Filament C++ API `c/` doesn't call (clang's AST + linker symbols, inline methods included) and `Fila*` functions without a Kotlin external; replaces `check-common-api.sh`.
+
+### Fixed
+- **Compressed `Texture.InternalFormat`s (ETC2, DXT, ASTC, RGTC, BPTC) were silently created as `RGBA8`** on every platform; they now reach Filament.
+
 ## [0.6.2] — 2026-09-29
 
 ### Fixed

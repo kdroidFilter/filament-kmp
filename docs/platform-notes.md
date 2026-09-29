@@ -45,7 +45,7 @@ This is standard practice for graphics, video, and game apps on Android. The `Su
 
 - Renders via `CAMetalLayer` embedded in a `UIKitView`.
 - Use static frameworks (`isStatic = true`) — keeps the Filament symbols inside your app binary and avoids dynamic-library loader issues.
-- Published Apple targets are **`iosArm64`** and **`iosSimulatorArm64`**; there is no `iosX64` and no standalone macOS Kotlin/Native target. Desktop macOS is served by the **JVM** target, which binds the same C wrapper through Project Panama (FFM) rather than `cinterop` — a different code path with the same API.
+- Published Apple targets are **`iosArm64`** and **`iosSimulatorArm64`**; there is no `iosX64` and no standalone macOS Kotlin/Native target. Desktop macOS is served by the **JVM** target, which reaches the same C wrapper through JNI rather than `@SymbolName` — a different code path with the same API.
 
 ### iOS Simulator: shadows render black
 
@@ -73,13 +73,13 @@ When the app runs on [Nucleus](https://nucleusframework.dev) (2.6+, Tao backend)
 | Linux | Filament (EGL build) shares the window's EGL context and renders into a GL texture Skia draws directly |
 | Windows | Filament (desktop GL) renders into a D3D11 texture through `WGL_NV_DX_interop2`, imported by Nucleus's `TextureView`. Falls back to readback where the driver lacks the extension |
 
-Requirements: the engine from `rememberFilamentEngine()` (the default of `FilamentSceneView`) — on Linux/Windows it is created on the window's GL context, so a hand-built `Engine` or an explicit non-GL backend keeps the readback path there. Linux needs the EGL-enabled Filament libs the release ships (`scripts/dev/build-host-libs.sh linuxX64` for local builds; the upstream GLX tarball keeps readback).
+Requirements: the engine from `rememberFilamentEngine()` (the default of `FilamentSceneView`) — on Linux/Windows it is created on the window's GL context, so a hand-built `Engine` or an explicit non-GL backend keeps the readback path there. Linux needs the EGL-enabled Filament libs the release ships (a local build makes them with `./gradlew prebuilts_linux-x64`, a full Filament source build; upstream's GLX tarball keeps readback).
 
 On an Apple M4 at 1280×800 dp, both paths capped at 30 fps (`scripts/dev/bench-desktop.sh duck 20 nucleus-gpu@30 nucleus-offscreen`), the GPU path uses about half the process CPU (median 25 % vs 57 % of a core); uncapped it also delivers every display frame (60 fps where readback reaches 30).
 
 ### Native library loading
 
-The FFM native runtime JAR (`dev.nucleusframework.filament-ffm:filament-ffm:...`) bundles the combined `libfilament-c` shared library per platform (`.dll`, `.dylib`, `.so`) as JAR resources and extracts it to a temp directory on first use. No system installation of Filament is needed. Requires a **JDK 22+** runtime.
+Each platform's `libfilament-c` (`.dll`, `.dylib`, `.so`) ships in its `filament-jni-runtime-<os>-<arch>` jar. `Filament.init()` extracts it once into a content-hash-keyed cache dir (`~/.filament-kmp/`) and loads it; no system installation of Filament is needed. Runs on any **JDK 17+**. See [`desktop/README.md`](../desktop/README.md) for the loader's knobs.
 
 ## Web / WASM
 

@@ -13,6 +13,11 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-09-29
+
+### Fixed
+- **`rememberGltfAsset` crash on dispose mid-load** (`filament-compose`): an asset leaving composition while its resources were still loading, together with the engine it was created on, destroyed its `ResourceLoader` after the engine and crashed the process (SIGSEGV or a Filament `PreconditionPanic`). The loader is now cancelled and destroyed in the asset's `onDispose`, before the engine goes away.
+
 ## [0.6.1] — 2026-09-28
 
 > [!WARNING]
@@ -498,7 +503,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.1...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.2...HEAD
+[0.6.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.1...0.6.2
 [0.6.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.0...0.6.1
 [0.6.0]: https://github.com/Erkko68/filament-kmp/compare/0.5.0...0.6.0
 [0.5.0]: https://github.com/Erkko68/filament-kmp/compare/0.4.0...0.5.0

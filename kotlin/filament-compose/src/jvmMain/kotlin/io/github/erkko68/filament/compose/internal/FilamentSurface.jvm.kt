@@ -67,15 +67,20 @@ private class Readback(val width: Int, val height: Int, transparent: Boolean = f
         val state = AtomicInteger(SLOT_FREE)
         var image: Image? = null
         var seq = 0L
+        var paused = false
     }
 
     val slots = Array(2) { Slot(width * height * 4) }
     private var issueSeq = 0L
 
-    /** UI thread. Starts an async GPU→CPU copy of the current frame into a free slot, if any. */
-    fun issueReadPixels(renderer: Renderer) {
+    /**
+     * UI thread. Starts an async GPU→CPU copy of the current frame into a free slot, if any; [paused] tells whether
+     * that frame was rendered paused.
+     */
+    fun issueReadPixels(renderer: Renderer, paused: Boolean) {
         val slot = slots.firstOrNull { it.state.get() == SLOT_FREE } ?: return
         slot.seq = ++issueSeq
+        slot.paused = paused
         slot.state.set(SLOT_IN_FLIGHT)
         renderer.readPixels(0, 0, width, height, slot.address, width * height * 4, Texture.Format.RGBA, Texture.Type.UBYTE, width) {
             // Possibly the backend thread: wrap the slot's pixels zero-copy; the
@@ -237,7 +242,8 @@ internal actual fun FilamentSurface(
         }
     }
 
-    FilamentRenderLoop(renderingEnabled) { frameTime ->
+    val gate = rememberPausedFrameGate(renderingEnabled, surface)
+    FilamentRenderLoop(gate.loopEnabled(renderingEnabled)) { frameTime ->
         val s = surface ?: return@FilamentRenderLoop
         if (!SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         SurfaceStats.measure {
@@ -247,11 +253,12 @@ internal actual fun FilamentSurface(
                 displayedImage = slot.image
                 SurfaceStats.surface("readback")
                 SurfaceStats.frameDelivered()
+                gate.delivered(pausedFrame = slot.paused)
             }
             if (renderer.beginFrame(s.swapChain, frameTime)) {
                 renderer.render(view)
                 // Swapchain readback must happen inside the frame (after render, before endFrame).
-                s.readback.issueReadPixels(renderer)
+                s.readback.issueReadPixels(renderer, paused = !renderingEnabled)
                 renderer.endFrame()
             }
         }

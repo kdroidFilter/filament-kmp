@@ -13,14 +13,12 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.node.Ref
 import androidx.compose.ui.unit.IntSize
 import dev.nucleusframework.window.tao.TaoOpenGlRenderContext
-import dev.nucleusframework.window.tao.TextureView
+import dev.nucleusframework.window.tao.TextureViewController
 import dev.nucleusframework.window.tao.TextureViewSource
 import dev.nucleusframework.window.tao.nucleusD3D11SharedTextureSource
 import dev.nucleusframework.window.tao.nucleusEglImageTextureSource
 import dev.nucleusframework.window.tao.rememberTaoGpuRenderContext
-import dev.nucleusframework.window.tao.rememberTextureViewController
 import io.github.erkko68.filament.Engine
-import io.github.erkko68.filament.Fence
 import io.github.erkko68.filament.InternalFilamentApi
 import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
@@ -101,7 +99,6 @@ internal fun NucleusGlFilamentSurface(
     onResize: (aspect: Double) -> Unit,
 ) {
     var pxSize by remember { mutableStateOf(IntSize.Zero) }
-    val controller = rememberTextureViewController()
     val onResizeRef = remember { Ref<(Double) -> Unit>() }
     SideEffect { onResizeRef.value = onResize }
 
@@ -116,70 +113,42 @@ internal fun NucleusGlFilamentSurface(
             emptyList()
         }
     }
-    var shown by remember(targets) { mutableStateOf<GlTarget?>(null) }
-    val inFlight = remember(targets) { Ref<Pair<GlTarget, Fence>>() }
-
     DisposableEffect(targets) {
         if (targets.isNotEmpty()) {
             view.viewport = Viewport(0, 0, pxSize.width, pxSize.height)
             onResizeRef.value?.invoke(pxSize.width.toDouble() / pxSize.height)
         }
         onDispose {
-            inFlight.value?.let { (target, fence) ->
-                engine.destroyFence(fence)
-                target.afterRender()
-            }
-            inFlight.value = null
             view.renderTarget = null
             engine.flushAndWait()
             targets.forEach { it.destroy(engine) }
         }
     }
 
-    FilamentRenderLoop(renderingEnabled) { frameTime ->
-        if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
-        SurfaceStats.measure {
-            val pending = inFlight.value
-            if (pending != null && pending.second.wait(Fence.Mode.FLUSH, 0) == Fence.FenceStatus.TIMEOUT_EXPIRED) {
-                return@measure
-            }
-            if (pending != null) {
-                engine.destroyFence(pending.second)
-                inFlight.value = null
-                pending.first.afterRender()
-                shown = pending.first
-                controller.markFrameAvailable()
-                SurfaceStats.surface(if (host.eglImages) "nucleus-egl" else "nucleus-dx")
-                SurfaceStats.frameDelivered()
-            }
-            val next = targets.first { it !== shown }
-            if (!next.beforeRender()) return@measure
-            view.renderTarget = next.renderTarget
-            renderer.renderStandaloneView(view)
-            inFlight.value = next to engine.createFence()
-            engine.flush()
-        }
-    }
-
-    TextureView(
-        source = shown?.source,
+    NucleusTextureSurface(
+        modifier = modifier.onSizeChanged { pxSize = it },
+        engine = engine,
+        renderer = renderer,
+        view = view,
+        targets = targets,
+        renderingEnabled = renderingEnabled,
+        kind = if (host.eglImages) "nucleus-egl" else "nucleus-dx",
         // Filament's GL rows are bottom-up; both hosts import the texture top-down.
-        modifier = modifier.onSizeChanged { pxSize = it }.graphicsLayer { scaleY = -1f },
-        controller = controller,
+        textureModifier = Modifier.graphicsLayer { scaleY = -1f },
     )
 }
 
 /** One shared texture imported into Filament, plus the window's view of it. */
-private class GlTarget(engine: Engine, host: NucleusGlHost, size: IntSize) {
+private class GlTarget(engine: Engine, host: NucleusGlHost, size: IntSize) : GpuTarget {
     private val texture: NativePointer = FilaGpuTexture_create(host.share, size.width, size.height)
         .also { check(it != 0L) { "FilaGpuTexture_create failed (${size.width}x${size.height})" } }
     private val target = ImportedRenderTarget(engine, FilaGpuTexture_glName(texture).toUInt().toLong(), size)
-    val renderTarget: RenderTarget get() = target.renderTarget
-    val source: TextureViewSource = host.source(texture, size)
+    override val renderTarget: RenderTarget get() = target.renderTarget
+    override val source: TextureViewSource = host.source(texture, size)
+    override val controller = TextureViewController()
 
-    /** Windows: GL may only write while the D3D11 texture is locked for it. */
-    fun beforeRender(): Boolean = FilaGpuTexture_lock(texture)
-    fun afterRender() { FilaGpuTexture_unlock(texture) }
+    override fun beforeRender(): Boolean = FilaGpuTexture_lock(texture)
+    override fun afterRender() { FilaGpuTexture_unlock(texture) }
 
     fun destroy(engine: Engine) {
         target.destroy(engine)

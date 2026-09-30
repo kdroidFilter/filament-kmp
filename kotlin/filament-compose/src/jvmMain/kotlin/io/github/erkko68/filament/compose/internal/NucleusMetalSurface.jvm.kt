@@ -12,13 +12,11 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.node.Ref
 import androidx.compose.ui.unit.IntSize
 import dev.nucleusframework.window.tao.TaoMetalRenderContext
-import dev.nucleusframework.window.tao.TextureView
+import dev.nucleusframework.window.tao.TextureViewController
 import dev.nucleusframework.window.tao.TextureViewSource
 import dev.nucleusframework.window.tao.nucleusMetalTextureSource
 import dev.nucleusframework.window.tao.rememberTaoGpuRenderContext
-import dev.nucleusframework.window.tao.rememberTextureViewController
 import io.github.erkko68.filament.Engine
-import io.github.erkko68.filament.Fence
 import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
 import io.github.erkko68.filament.View
@@ -50,9 +48,7 @@ internal fun rememberNucleusMetalDevice(): Long =
 /**
  * Filament → shared MTLTexture → Nucleus TextureView. Filament and Nucleus both take
  * `MTLCreateSystemDefaultDevice()`, so the texture lives on the window's device and Nucleus
- * samples it in place. Two targets ping-pong: Filament renders into one while the other is on
- * screen, and a target is only handed over once its Filament fence (a GPU-side MTLSharedEvent
- * signal) has fired — TextureView's contract is that the producer finished writing.
+ * samples it in place; [NucleusTextureSurface] renders and presents.
  */
 @Composable
 internal fun NucleusMetalFilamentSurface(
@@ -65,7 +61,6 @@ internal fun NucleusMetalFilamentSurface(
     onResize: (aspect: Double) -> Unit,
 ) {
     var size by remember { mutableStateOf(IntSize.Zero) }
-    val controller = rememberTextureViewController()
     val onResizeRef = remember { Ref<(Double) -> Unit>() }
     SideEffect { onResizeRef.value = onResize }
 
@@ -73,17 +68,12 @@ internal fun NucleusMetalFilamentSurface(
     val targets = remember(engine, metalDevice, size) {
         if (size.width > 0 && size.height > 0) List(2) { MetalTarget(engine, metalDevice, size) } else emptyList()
     }
-    var shown by remember(targets) { mutableStateOf<MetalTarget?>(null) }
-    val inFlight = remember(targets) { Ref<Pair<MetalTarget, Fence>>() }
-
     DisposableEffect(targets) {
         if (targets.isNotEmpty()) {
             view.viewport = Viewport(0, 0, size.width, size.height)
             onResizeRef.value?.invoke(size.width.toDouble() / size.height)
         }
         onDispose {
-            inFlight.value?.let { (_, fence) -> engine.destroyFence(fence) }
-            inFlight.value = null
             view.renderTarget = null
             // Drain Filament before the MTLTextures it imported go away.
             engine.flushAndWait()
@@ -91,45 +81,26 @@ internal fun NucleusMetalFilamentSurface(
         }
     }
 
-    FilamentRenderLoop(renderingEnabled) { frameTime ->
-        if (targets.isEmpty() || !SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
-        SurfaceStats.measure {
-            val pending = inFlight.value
-            // GPU still busy with the previous frame: skip rather than stall the UI thread.
-            if (pending != null && pending.second.wait(Fence.Mode.FLUSH, 0) == Fence.FenceStatus.TIMEOUT_EXPIRED) {
-                return@measure
-            }
-            if (pending != null) {
-                engine.destroyFence(pending.second)
-                inFlight.value = null
-                shown = pending.first
-                controller.markFrameAvailable()
-                SurfaceStats.surface("nucleus-metal")
-                SurfaceStats.frameDelivered()
-            }
-            val next = targets.first { it !== shown }
-            view.renderTarget = next.renderTarget
-            renderer.renderStandaloneView(view)
-            inFlight.value = next to engine.createFence()
-            engine.flush()
-        }
-    }
-
-    TextureView(
-        source = shown?.source,
+    NucleusTextureSurface(
         modifier = modifier.onSizeChanged { size = it },
-        controller = controller,
+        engine = engine,
+        renderer = renderer,
+        view = view,
+        targets = targets,
+        renderingEnabled = renderingEnabled,
+        kind = "nucleus-metal",
     )
 }
 
 /** One MTLTexture shared with Nucleus, imported into Filament as the color attachment. */
-private class MetalTarget(engine: Engine, device: Long, size: IntSize) {
+private class MetalTarget(engine: Engine, device: Long, size: IntSize) : GpuTarget {
     val mtlTexture: Long = FilaMetalTexture_create(device, size.width, size.height)
         .also { check(it != 0L) { "MTLDevice newTextureWithDescriptor failed (${size.width}x${size.height})" } }
-    val source: TextureViewSource = nucleusMetalTextureSource(mtlTexture, size.width, size.height)
+    override val controller = TextureViewController()
+    override val source: TextureViewSource = nucleusMetalTextureSource(mtlTexture, size.width, size.height)
     // Filament adopts a +1 reference on import (CFBridgingRelease); ours stays for Nucleus.
     private val target = ImportedRenderTarget(engine, mtlTexture.also(::FilaMetalTexture_retain), size)
-    val renderTarget: RenderTarget get() = target.renderTarget
+    override val renderTarget: RenderTarget get() = target.renderTarget
 
     fun destroy(engine: Engine) {
         target.destroy(engine)

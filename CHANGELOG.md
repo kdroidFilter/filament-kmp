@@ -13,6 +13,12 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-09-30
+
+### Fixed
+- **A paused view could stay empty or stale** (`filament-compose`, JVM): with `renderingEnabled = false` right after a change, a frame still on the GPU, skipped, or not yet rendered into a just-resized surface never reached the screen. A paused surface now renders until its current scene is shown, a resize included.
+- **The 3D image lagged about two frames behind the rest of the UI** (`filament-compose`, Nucleus Metal and GL/DX surfaces): frames are now rendered in the draw pass, after the composition, and shown in that same frame, so 2D overlays drawn from the same state line up without delaying them.
+
 ## [0.6.3] — 2026-09-29
 
 > [!WARNING]
@@ -522,7 +528,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.3...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.4...HEAD
+[0.6.4]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.3...0.6.4
 [0.6.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.2...0.6.3
 [0.6.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.1...0.6.2
 [0.6.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.0...0.6.1

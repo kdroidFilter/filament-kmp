@@ -43,6 +43,8 @@ class MaterialKeyTest : GltfioTestFixture() {
 
         key.hasClearCoatTexture = true;  assertTrue(key.hasClearCoatTexture)
         key.hasClearCoatTexture = false; assertFalse(key.hasClearCoatTexture)
+        key.hasSpecularGlossinessTexture = true;  assertTrue(key.hasSpecularGlossinessTexture)
+        key.hasSpecularGlossinessTexture = false; assertFalse(key.hasSpecularGlossinessTexture)
 
         key.hasClearCoatRoughnessTexture = true;  assertTrue(key.hasClearCoatRoughnessTexture)
         key.hasClearCoatRoughnessTexture = false; assertFalse(key.hasClearCoatRoughnessTexture)
@@ -97,6 +99,7 @@ class MaterialKeyTest : GltfioTestFixture() {
         key.sheenColorUV = 1;        assertEquals(1, key.sheenColorUV)
         key.sheenRoughnessUV = 1;    assertEquals(1, key.sheenRoughnessUV)
         key.volumeThicknessUV = 1;   assertEquals(1, key.volumeThicknessUV)
+        key.specularGlossinessUV = 1; assertEquals(1, key.specularGlossinessUV)
     }
 
     @Test
@@ -104,7 +107,9 @@ class MaterialKeyTest : GltfioTestFixture() {
         val key = MaterialKey()
         key.hasBaseColorTexture = true
         key.baseColorUV = 0
-        val uvmap = IntArray(8)
-        key.constrainMaterial(uvmap)
+        val uvmap: UvMap = Array(UV_MAP_SIZE) { UvSet.UNUSED }
+        constrainMaterial(key, uvmap)
+        assertEquals(UvSet.UV0, uvmap[0])
+        assertEquals(1, getNumUvSets(uvmap))
     }
 }

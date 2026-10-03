@@ -5,6 +5,10 @@ package io.github.erkko68.filament.interop
 import io.github.erkko68.filament.upcall
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.COpaquePointer
+import kotlinx.cinterop.COpaquePointerVar
+import kotlinx.cinterop.FloatVar
+import kotlinx.cinterop.IntVar
+import kotlinx.cinterop.get
 import kotlinx.cinterop.CPointed
 import kotlinx.cinterop.Pinned
 import kotlinx.cinterop.StableRef
@@ -37,6 +41,8 @@ actual class InteropScope actual constructor() {
     actual fun toInterop(array: LongArray?): NativePointer = if (array == null || array.isEmpty()) NullPointer else keep(array.pin()).addressOf(0).toLong()
     actual fun toInterop(array: FloatArray?): NativePointer = if (array == null || array.isEmpty()) NullPointer else keep(array.pin()).addressOf(0).toLong()
     actual fun toInterop(array: DoubleArray?): NativePointer = if (array == null || array.isEmpty()) NullPointer else keep(array.pin()).addressOf(0).toLong()
+    // Apple's targets are all 64-bit.
+    actual fun toInterop(pointers: List<NativePointer>): NativePointer = toInterop(pointers.toLongArray())
 
     // C wrote straight into the pinned array.
     actual fun NativePointer.fromInterop(result: ByteArray) {}
@@ -71,17 +77,28 @@ actual fun upload(data: ByteArray, size: Int, onRelease: (() -> Unit)?): Upload 
 
 actual fun stringFromInterop(ptr: NativePointer): String? = ptr.toCPointer<ByteVar>()?.toKString()
 
-private class Callback(val once: Boolean, val fn: (NativePointer) -> Unit)
+actual fun readInts(ptr: NativePointer, count: Int): IntArray =
+    if (count == 0) IntArray(0) else ptr.toCPointer<IntVar>()!!.let { p -> IntArray(count) { p[it] } }
 
-private fun dispatch(userData: COpaquePointer?, arg: NativePointer) {
+actual fun readFloats(ptr: NativePointer, count: Int): FloatArray =
+    if (count == 0) FloatArray(0) else ptr.toCPointer<FloatVar>()!!.let { p -> FloatArray(count) { p[it] } }
+
+actual fun readPointers(ptr: NativePointer, count: Int): List<NativePointer> =
+    if (count == 0) emptyList() else ptr.toCPointer<COpaquePointerVar>()!!.let { p -> List(count) { p[it].toLong() } }
+
+private class Callback(val once: Boolean, val fn: (NativePointer, Int) -> Unit)
+
+private fun dispatch(userData: COpaquePointer?, arg: NativePointer, status: Int = 0) {
     val ref = userData!!.asStableRef<Callback>()
     val callback = ref.get()
     if (callback.once) ref.dispose()
-    upcall { callback.fn(arg) }
+    upcall { callback.fn(arg, status) }
 }
 
 actual object Callbacks {
-    actual fun register(once: Boolean, fn: (arg: NativePointer) -> Unit): NativePointer =
+    actual fun register(once: Boolean, fn: (arg: NativePointer) -> Unit): NativePointer = registerStatus(once) { a, _ -> fn(a) }
+
+    actual fun registerStatus(once: Boolean, fn: (arg: NativePointer, status: Int) -> Unit): NativePointer =
         StableRef.create(Callback(once, fn)).asCPointer().toLong()
 
     actual fun release(userData: NativePointer) {
@@ -90,6 +107,9 @@ actual object Callbacks {
 
     actual val userOnly: NativePointer = staticCFunction { userData: COpaquePointer? -> dispatch(userData, NullPointer) }.toLong()
     actual val argUser: NativePointer = staticCFunction { arg: COpaquePointer?, userData: COpaquePointer? -> dispatch(userData, arg.toLong()) }.toLong()
+    actual val userStatus: NativePointer = staticCFunction { userData: COpaquePointer?, status: Int -> dispatch(userData, NullPointer, status) }.toLong()
+    actual val argUserStatus: NativePointer =
+        staticCFunction { arg: COpaquePointer?, userData: COpaquePointer?, status: Int -> dispatch(userData, arg.toLong(), status) }.toLong()
     actual val keepBuffer: NativePointer = staticCFunction { buffer: COpaquePointer?, _: ULong, userData: COpaquePointer? -> dispatch(userData, buffer.toLong()) }.toLong()
 }
 

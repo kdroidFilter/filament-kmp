@@ -25,10 +25,11 @@ class RenderTargetTest : FilamentTestFixture() {
             .mipLevel(RenderTarget.AttachmentPoint.COLOR, 0)
             .face(RenderTarget.AttachmentPoint.COLOR, Texture.CubemapFace.POSITIVE_X)
             .layer(RenderTarget.AttachmentPoint.COLOR, 0)
+            .samples(1)
             .build(engine)
 
         assertNotNull(target)
-        assertTrue(engine.isValidRenderTarget(target))
+        assertTrue(engine.isValid(target))
 
         val retrieved = target.getTexture(RenderTarget.AttachmentPoint.COLOR)
         if (retrieved != null) {
@@ -38,8 +39,25 @@ class RenderTargetTest : FilamentTestFixture() {
         assertEquals(0, target.getMipLevel(RenderTarget.AttachmentPoint.COLOR))
         assertEquals(Texture.CubemapFace.POSITIVE_X, target.getFace(RenderTarget.AttachmentPoint.COLOR))
         assertEquals(0, target.getLayer(RenderTarget.AttachmentPoint.COLOR))
+        assertTrue(target.supportedColorAttachmentsCount >= 4)
 
-        engine.destroyRenderTarget(target)
-        engine.destroyTexture(tex)
+        engine.destroy(target)
+        engine.destroy(tex)
+    }
+
+    @Test
+    fun testMultiview() {
+        val tex = Texture.Builder().width(8).height(8).depth(2)
+            .sampler(Texture.Sampler.SAMPLER_2D_ARRAY)
+            .format(Texture.InternalFormat.RGBA8)
+            .usage(Texture.Usage.COLOR_ATTACHMENT)
+            .build(engine)
+        val target = RenderTarget.Builder()
+            .texture(RenderTarget.AttachmentPoint.COLOR, tex)
+            .multiview(RenderTarget.AttachmentPoint.COLOR, layerCount = 2)
+            .build(engine)
+        assertTrue(engine.isValid(target))
+        engine.destroy(target)
+        engine.destroy(tex)
     }
 }

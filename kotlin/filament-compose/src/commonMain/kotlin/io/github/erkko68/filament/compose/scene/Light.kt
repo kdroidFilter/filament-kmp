@@ -10,6 +10,7 @@ import io.github.erkko68.filament.LightManager
 import io.github.erkko68.filament.compose.FilamentSceneScope
 import io.github.erkko68.filament.compose.LocalFilamentEngine
 import io.github.erkko68.filament.compose.noFilamentEngine
+import io.github.erkko68.filament.compose.internal.rememberOwned
 import io.github.erkko68.filament.compose.LocalFilamentScene
 import io.github.erkko68.filament.compose.noFilamentScene
 import io.github.erkko68.filament.compose.OnFrame
@@ -160,13 +161,8 @@ internal fun FilamentSceneScope.LightNode(snapshot: LightSnapshot) {
     val scene  = LocalFilamentScene.current ?: noFilamentScene()
     val parent = LocalParentEntity.current
 
-    val entity = remember(engine) { engine.entityManager.create() }
-
-    // Entity destruction is registered *first* so it runs *last* on dispose (Compose tears effects
-    // down in reverse registration order), keeping the entity live while the cleanups below run.
-    DisposableEffect(entity) {
-        onDispose { engine.entityManager.destroy(entity) }
-    }
+    // Remembered before the effects below, so it's destroyed after their cleanups run.
+    val entity = rememberOwned(engine, create = { engine.entityManager.create() }) { engine.entityManager.destroy(it) }
 
     // Transform component + scene membership, independent of light parameters.
     DisposableEffect(entity) {
@@ -174,7 +170,7 @@ internal fun FilamentSceneScope.LightNode(snapshot: LightSnapshot) {
         if (!tm.hasComponent(entity)) tm.create(entity)
         scene.addEntity(entity)
         onDispose {
-            scene.removeEntity(entity)
+            scene.remove(entity)
             tm.destroy(entity)
         }
     }
@@ -421,19 +417,18 @@ fun FilamentSceneScope.Light(
     val scene  = LocalFilamentScene.current ?: noFilamentScene()
     val parent = LocalParentEntity.current
 
-    val entity = remember(engine) { engine.entityManager.create() }
+    val entity = rememberOwned(engine, create = { engine.entityManager.create() }) { engine.entityManager.destroy(it) }
 
     DisposableEffect(entity) {
         onDispose {
             val tm = engine.transformManager
             if (tm.hasComponent(entity)) tm.destroy(entity)
-            engine.entityManager.destroy(entity)
         }
     }
 
     DisposableEffect(entity) {
         scene.addEntity(entity)
-        onDispose { scene.removeEntity(entity) }
+        onDispose { scene.remove(entity) }
     }
 
     DisposableEffect(entity, type, *keys) {

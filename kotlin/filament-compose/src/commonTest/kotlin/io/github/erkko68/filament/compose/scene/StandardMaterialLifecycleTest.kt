@@ -1,11 +1,13 @@
 package io.github.erkko68.filament.compose.scene
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.ExperimentalTestApi
 import io.github.erkko68.filament.Material
 import io.github.erkko68.filament.MaterialInstance
+import io.github.erkko68.filament.Texture
 import io.github.erkko68.filament.compose.testutils.TierBSceneFixture
 import io.github.erkko68.filament.compose.testutils.assertDestroyed
 import io.github.erkko68.filament.compose.testutils.skippedComposeTest
@@ -44,11 +46,11 @@ class StandardMaterialLifecycleTest : TierBSceneFixture() {
                 setContent { captured = rememberStandardMaterial(type) }
                 waitForIdle()
                 val m = assertNotNull(captured, "$type should build from embedded bytes")
-                assertTrue(engine.isValidMaterial(m), "$type should be live while composed")
+                assertTrue(engine.isValid(m), "$type should be live while composed")
 
                 setContent {}
                 waitForIdle()
-                assertDestroyed("$type should be destroyed after disposal") { engine.isValidMaterial(m) }
+                assertDestroyed("$type should be destroyed after disposal") { engine.isValid(m) }
             }
         }
     }
@@ -58,7 +60,7 @@ class StandardMaterialLifecycleTest : TierBSceneFixture() {
     fun reactiveInstanceReappliesOnKeyChangeAndIsFreed() = run {
         val engine = engine ?: return@run skippedComposeTest()
         val scene = scene ?: return@run skippedComposeTest()
-        val material = Material.Builder().payload(StandardMaterial.Lit.payload()).build(engine)
+        val material = Material.Builder().payload(StandardMaterial.Lit.payload()).build(engine)!!
 
         withFilamentScene(engine, scene) { setContent ->
             var applyCount = 0
@@ -71,7 +73,7 @@ class StandardMaterialLifecycleTest : TierBSceneFixture() {
             waitForIdle()
             val first = assertNotNull(instance, "instance should be created")
             assertEquals(1, applyCount, "configure runs once on creation")
-            assertTrue(engine.isValidMaterialInstance(material, first), "instance live while composed")
+            assertTrue(engine.isValid(material, first), "instance live while composed")
 
             // The harness runs with mainClock.autoAdvance = false, so a state-change recomposition
             // only happens when the frame clock is ticked — waitForIdle() alone won't drive it.
@@ -89,12 +91,48 @@ class StandardMaterialLifecycleTest : TierBSceneFixture() {
             setContent {}
             waitForIdle()
             assertDestroyed("instance should be destroyed after disposal") {
-                engine.isValidMaterialInstance(material, first)
+                engine.isValid(material, first)
             }
 
             // Inside the body: on web the harness runs asynchronously, so code placed after the
             // withFilamentScene call would destroy the material before the composition uses it.
-            engine.destroyMaterial(material)
+            engine.destroy(material)
+        }
+    }
+
+    @OptIn(ExperimentalTestApi::class)
+    @Test
+    fun eachInstanceHelperAppliesItsParametersAndIsFreed() = run {
+        val engine = engine ?: return@run skippedComposeTest()
+        val scene = scene ?: return@run skippedComposeTest()
+        val texture = Texture.Builder().width(1).height(1).format(Texture.InternalFormat.RGBA8).build(engine)
+        val red = LinearColor(1f, 0f, 0f)
+        val float = MaterialInstance.FloatElement.FLOAT
+        // Each helper, and a scalar it must have set (name to value).
+        val helpers: List<Triple<String, @Composable () -> MaterialInstance, Pair<String, Float>>> = listOf(
+            Triple("Color", { rememberColorMaterialInstance(red, roughness = 0.25f) }, "roughness" to 0.25f),
+            Triple("UnlitColor", { rememberUnlitColorMaterialInstance(red) }, "" to 0f),
+            Triple("Textured", { rememberTexturedMaterialInstance(texture, metallic = 0.75f) }, "metallic" to 0.75f),
+            Triple("Emissive", { rememberEmissiveMaterialInstance(red, intensity = 4f) }, "intensity" to 4f),
+            Triple("TransparentColor", { rememberTransparentColorMaterialInstance(red, alpha = 0.3f) }, "alpha" to 0.3f),
+        )
+
+        withFilamentScene(engine, scene) { setContent ->
+            for ((name, helper, expected) in helpers) {
+                var instance: MaterialInstance? = null
+                setContent { instance = helper() }
+                waitForIdle()
+                val mi = assertNotNull(instance, name)
+                val material = mi.material
+                assertTrue(engine.isValid(material, mi), "$name should be live while composed")
+                val (param, value) = expected
+                if (param.isNotEmpty()) assertEquals(value, mi.getParameter(param, float)[0], 1e-6f, "$name.$param")
+
+                setContent {}
+                waitForIdle()
+                assertDestroyed("$name should be destroyed after disposal") { engine.isValid(material) }
+            }
+            engine.destroy(texture) // inside the body: on web it runs after this function returns
         }
     }
 
@@ -106,13 +144,13 @@ class StandardMaterialLifecycleTest : TierBSceneFixture() {
         val lit1 = cache.get(StandardMaterial.Lit)
         val lit2 = cache.get(StandardMaterial.Lit)
         assertSame(lit1, lit2, "cache returns one shared material per type")
-        assertTrue(engine.isValidMaterial(lit1), "cached material is live")
+        assertTrue(engine.isValid(lit1), "cached material is live")
 
         val unlit = cache.get(StandardMaterial.Unlit)
         assertTrue(lit1 != unlit, "different types get different materials")
 
         cache.dispose()
-        assertDestroyed("cache.dispose frees the Lit material") { engine.isValidMaterial(lit1) }
-        assertDestroyed("cache.dispose frees the Unlit material") { engine.isValidMaterial(unlit) }
+        assertDestroyed("cache.dispose frees the Lit material") { engine.isValid(lit1) }
+        assertDestroyed("cache.dispose frees the Unlit material") { engine.isValid(unlit) }
     }
 }

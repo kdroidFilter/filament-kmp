@@ -5,7 +5,7 @@ The `filament-compose` module provides the integration between the [Filament](ht
 ## Overview
 
 - **[Scope & Philosophy](scope.md)**: Understand the goals and design principles behind `filament-compose`.
-- **[Integration Strategies](integration-strategies.md)**: How Filament's GPU output reaches the Compose canvas on each platform (native surface, web offscreen+blit, or pixel readback), plus the per-platform layering & stacking limitations.
+- **[Integration Strategies](integration-strategies.md)**: How Filament's GPU output reaches the Compose canvas on each platform (native surface, web offscreen+blit, or desktop readback / experimental GPU sharing), plus the per-platform layering & stacking limitations.
 - **[Materials](materials.md)**: Authoring `.mat` source, compiling with `matc`, loading at runtime, parameterising per-instance, and when to use runtime `filamat` instead.
 
 ## Scene vs. View
@@ -44,7 +44,7 @@ FilamentSceneView(
 
 ## Lifecycle and resource management
 
-The Compose DSL manages Filament resource lifetimes through `DisposableEffect`:
+The Compose DSL destroys the Filament objects it creates when they leave the composition (or when a composition pass is discarded), always after everything created from them:
 
 - `rememberFilamentEngine` — destroys the `Engine` when leaving composition.
 - `rememberFilamentScene` — destroys its `Scene` (and the engine, if it created one).
@@ -58,7 +58,7 @@ If you create raw Filament objects through `FilamentEffect` (inside `rememberFil
 rememberFilamentScene {
     FilamentEffect {
         val mat = Material.Builder().payload(bytes, bytes.size).build(engine)
-        onDispose { engine.destroyMaterial(mat) }
+        onDispose { engine.destroy(mat) }
     }
 }
 ```
@@ -212,6 +212,21 @@ And the per-**recomposition** siblings, for completeness:
 composition → `rememberSceneClock`; any other per-frame side effect → `OnFrame` (or
 `FilamentEffect`'s `onFrame` inside a scene); reacting to *state* changes rather than the clock →
 `onUpdate`.
+
+### Pausing a view: `renderingEnabled`
+
+A `FilamentView` (or `FilamentSceneView`) renders on every display refresh by default. Pass
+`renderingEnabled = false` to stop its render loop: no GPU or CPU work per frame, and the last frame
+stays on screen (it isn't re-rendered on resize either). Set it back to `true` to resume. Use it for a
+static scene that only changes on input, or a view that is off screen or behind a dialog:
+
+```kotlin
+FilamentSceneView(
+    modifier = Modifier.fillMaxSize(),
+    cameraState = cam,
+    renderingEnabled = !settingsDialogOpen,   // freeze the 3D view while a dialog covers it
+) { /* … */ }
+```
 
 ## Animating glTF models
 

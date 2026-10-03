@@ -23,25 +23,25 @@ include(cmake/Platform.cmake)
 include(cmake/FilamentLibraries.cmake)
 
 set(FILA_MODULES filament filamat filament-utils gltfio)
-foreach(module IN LISTS FILA_MODULES)
-    include_directories(${module}/c)
-endforeach()
-# gltfio and filament-utils reuse filament's internal conversion helpers.
-include_directories(filament/cpp ${FILAMENT_INCLUDE_DIR})
+# The JNI forwarders include headers by their path under c/.
+include_directories(${CMAKE_CURRENT_SOURCE_DIR} ${FILAMENT_INCLUDE_DIR})
 
+# Each module is its generated API (<module>/generated) plus the hand-written rest (<module>/manual).
 foreach(module IN LISTS FILA_MODULES)
-    file(GLOB sources CONFIGURE_DEPENDS ${module}/cpp/*.cpp)
+    file(GLOB sources CONFIGURE_DEPENDS ${module}/generated/*.cpp ${module}/manual/*.cpp)
     add_library(fila-${module} OBJECT ${sources})
 endforeach()
+# This fork: filament-compose's Nucleus GPU surfaces (JVM-only, outside the generated/manual API).
+target_sources(fila-filament PRIVATE filament/interop/FilaInterop.cpp)
 
-# Interop.cpp (filament-compose's Nucleus GPU surfaces): libs from an EGL build of Filament (the Linux
-# source recipe writes prebuilts/<id>/egl) run their GL backend on GLES through EGL, and Interop.cpp then
+# FilaInterop.cpp (filament-compose's Nucleus GPU surfaces): libs from an EGL build of Filament (the Linux
+# source recipe writes prebuilts/<id>/egl) run their GL backend on GLES through EGL, and FilaInterop.cpp then
 # offers the host-display EGL share. It subclasses PlatformEGLHeadless; Filament is built without RTTI,
 # so it must be too or it references a base typeinfo that doesn't exist.
 if (FILAMENT_PLATFORM STREQUAL "linux" AND EXISTS "${FILAMENT_LIB_DIR}/../egl")
     set(FILA_EGL_PLATFORM ON)
     target_compile_definitions(fila-filament PRIVATE FILA_EGL_PLATFORM=1)
-    set_source_files_properties(filament/cpp/Interop.cpp PROPERTIES COMPILE_OPTIONS -fno-rtti)
+    set_source_files_properties(filament/interop/FilaInterop.cpp PROPERTIES COMPILE_OPTIONS -fno-rtti)
 endif()
 
 if (FILAMENT_PLATFORM MATCHES "^ios")

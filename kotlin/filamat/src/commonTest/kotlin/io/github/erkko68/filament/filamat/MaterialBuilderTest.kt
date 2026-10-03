@@ -1,8 +1,10 @@
 package io.github.erkko68.filament.filamat
 
+import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.VertexBuffer.VertexAttribute
 import io.github.erkko68.filament.filamat.testutils.FilamatTestFixture
 import kotlin.test.Test
+import kotlin.test.assertFalse
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -87,12 +89,21 @@ class MaterialBuilderTest : FilamatTestFixture() {
                 .materialDomain(MaterialBuilder.MaterialDomain.SURFACE)
                 .shading(MaterialBuilder.Shading.UNLIT)
                 .interpolation(MaterialBuilder.Interpolation.SMOOTH)
-                .uniformParameter(MaterialBuilder.UniformType.FLOAT, "myUniform")
-                .uniformParameter(MaterialBuilder.UniformType.FLOAT2, MaterialBuilder.ParameterPrecision.HIGH, "myPrecise")
-                .uniformParameterArray(MaterialBuilder.UniformType.FLOAT4, 4, "myArray")
-                .uniformParameterArray(MaterialBuilder.UniformType.FLOAT4, 2, MaterialBuilder.ParameterPrecision.MEDIUM, "myPreciseArray")
-                .samplerParameter(MaterialBuilder.SamplerType.SAMPLER_2D, MaterialBuilder.SamplerFormat.FLOAT, MaterialBuilder.ParameterPrecision.DEFAULT, "myTex")
+                .parameter("myUniform", MaterialBuilder.UniformType.FLOAT)
+                .parameter("myPrecise", MaterialBuilder.UniformType.FLOAT2, MaterialBuilder.ParameterPrecision.HIGH)
+                .parameter("myArray", 4, MaterialBuilder.UniformType.FLOAT4)
+                .parameter("myPreciseArray", 2, MaterialBuilder.UniformType.FLOAT4, MaterialBuilder.ParameterPrecision.MEDIUM)
+                .parameter("myTex", MaterialBuilder.SamplerType.SAMPLER_2D)
+                .parameter("myFragmentTex", MaterialBuilder.SamplerType.SAMPLER_2D, stages = setOf(MaterialBuilder.ShaderStage.FRAGMENT))
+                .constant("myIntConstant", MaterialBuilder.ConstantType.INT, 3)
+                .constant("myFloatConstant", MaterialBuilder.ConstantType.FLOAT, 0.5f)
+                .constant("myBoolConstant", MaterialBuilder.ConstantType.BOOL, true)
                 .variable(MaterialBuilder.Variable.CUSTOM0, "myVar")
+                .variable(MaterialBuilder.Variable.CUSTOM1, "myPreciseVar", MaterialBuilder.ParameterPrecision.HIGH)
+                .shaderDefine("MY_DEFINE", "1")
+                .quality(MaterialBuilder.ShaderQuality.HIGH)
+                .linearFog(false)
+                .materialSource("material { name : TestMaterial }")
                 .require(VertexAttribute.POSITION)
                 .material("void material(inout MaterialInputs m) { prepareMaterial(m); }")
                 .materialVertex("void materialVertex(inout MaterialVertexInputs m) {}")
@@ -131,7 +142,92 @@ class MaterialBuilderTest : FilamatTestFixture() {
         // Package.invalidPackage() is non-null, so assertNotNull alone passes even when
         // MaterialBuilder::init() never ran and the compile was skipped.
         assertNotNull(pkg)
-        assertTrue(pkg.isValid, "material did not compile — was Filamat.init() called?")
-        assertTrue(pkg.buffer.isNotEmpty(), "valid package with an empty buffer")
+        assertTrue(pkg.isValid, "material did not compile — was MaterialBuilder.init() called?")
+        assertTrue(pkg.data.isNotEmpty(), "valid package with no data")
+    }
+
+    @Test
+    fun testBrokenShaderBuildsInvalidPackage() {
+        val pkg = MaterialBuilder()
+            .name("Broken")
+            .shading(MaterialBuilder.Shading.UNLIT)
+            .material("void material(inout MaterialInputs m) { this is not glsl }")
+            .build()
+        assertFalse(pkg.isValid, "a shader that doesn't compile must give an invalid package")
+    }
+
+    @Test
+    fun testAttributeDatabase() {
+        val attributes = MaterialBuilder.getAttributeDatabase()
+        val uv0 = attributes.single { it.location == VertexAttribute.UV0 }
+        assertEquals("uv0", uv0.name)
+        assertEquals(MaterialBuilder.UniformType.FLOAT2, uv0.type)
+        assertEquals("mesh_uv0", uv0.attributeName)
+        assertEquals("HAS_ATTRIBUTE_UV0", uv0.defineName)
+    }
+
+    private fun MaterialBuilder.buildValid(): MaterialPackage =
+        build().also { assertTrue(it.isValid, "material did not compile") }
+
+    private fun unlit() = MaterialBuilder()
+        .shading(MaterialBuilder.Shading.UNLIT)
+        .material("void material(inout MaterialInputs m) { prepareMaterial(m); }")
+
+    @Test
+    fun testCompilerOptions() {
+        unlit()
+            .name("Options")
+            .featureLevel(Engine.FeatureLevel.FEATURE_LEVEL_1)
+            .setApiLevel(1)
+            .instanced(true)
+            .shadowFarAttenuation(true)
+            .vertexDomainDeviceJittered(true)
+            .useDefaultDepthVariant()
+            .stereoscopicType(Engine.StereoscopicType.INSTANCED)
+            .stereoscopicEyeCount(2)
+            .workarounds(MaterialBuilder.Workarounds.NONE)
+            .noSamplerValidation(true)
+            .includeEssl1(false)
+            .compilationParameters("")
+            .printShaders(false)
+            .saveRawVariants(false)
+            .generateDebugInfo(true)
+            .buildValid()
+    }
+
+    @Test
+    fun testCustomBlending() {
+        unlit()
+            .name("CustomBlend")
+            .blending(MaterialBuilder.BlendingMode.CUSTOM)
+            .customBlendFunctions(
+                MaterialBuilder.BlendFunction.SRC_ALPHA, MaterialBuilder.BlendFunction.ONE,
+                MaterialBuilder.BlendFunction.ONE_MINUS_SRC_ALPHA, MaterialBuilder.BlendFunction.ZERO,
+            )
+            .buildValid()
+    }
+
+    @Test
+    fun testPostProcessOutput() {
+        MaterialBuilder()
+            .name("PostProcess")
+            .enableFramebufferFetch() // only meant for post-process materials
+            .materialDomain(MaterialBuilder.MaterialDomain.POST_PROCESS)
+            .output(
+                MaterialBuilder.VariableQualifier.OUT, MaterialBuilder.OutputTarget.COLOR,
+                MaterialBuilder.ParameterPrecision.DEFAULT, MaterialBuilder.OutputType.FLOAT4, "color",
+            )
+            .material("void postProcess(inout PostProcessInputs p) { p.color = vec4(1.0); }")
+            .buildValid()
+    }
+
+    @Test
+    fun testComputeGroupSize() {
+        MaterialBuilder()
+            .name("Compute")
+            .materialDomain(MaterialBuilder.MaterialDomain.COMPUTE)
+            .groupSize(8, 8, 1)
+            .material("void compute() {}")
+            .buildValid()
     }
 }

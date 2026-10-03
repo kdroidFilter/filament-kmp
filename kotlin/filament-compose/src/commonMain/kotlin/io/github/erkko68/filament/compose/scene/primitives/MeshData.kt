@@ -3,11 +3,8 @@ package io.github.erkko68.filament.compose.scene.primitives
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Immutable
-import androidx.compose.runtime.RememberObserver
-import androidx.compose.runtime.remember
 import io.github.erkko68.filament.Box
 import io.github.erkko68.filament.Engine
-import io.github.erkko68.filament.Entity
 import io.github.erkko68.filament.IndexBuffer
 import io.github.erkko68.filament.MaterialInstance
 import io.github.erkko68.filament.RenderableManager
@@ -15,16 +12,15 @@ import io.github.erkko68.filament.SurfaceOrientation
 import io.github.erkko68.filament.VertexBuffer
 import io.github.erkko68.filament.VertexBuffer.AttributeType
 import io.github.erkko68.filament.VertexBuffer.VertexAttribute
-import io.github.erkko68.filament.compose.EngineRetention
 import io.github.erkko68.filament.compose.EntityScope
 import io.github.erkko68.filament.compose.EntityScopeImpl
 import io.github.erkko68.filament.compose.LocalFilamentEngine
 import io.github.erkko68.filament.compose.noFilamentEngine
 import io.github.erkko68.filament.compose.LocalFilamentScene
 import io.github.erkko68.filament.compose.noFilamentScene
+import io.github.erkko68.filament.compose.internal.rememberOwned
 import io.github.erkko68.filament.compose.internal.transformMatrix
 import io.github.erkko68.filament.compose.scene.LocalGroupVisible
-import io.github.erkko68.filament.compose.scene.MaterialLifetimes
 import io.github.erkko68.filament.compose.scene.LocalParentEntity
 import io.github.erkko68.filament.compose.scene.Position
 import io.github.erkko68.filament.compose.scene.Rotation
@@ -80,10 +76,9 @@ private fun MeshData.upload(engine: Engine): MeshHandles {
         .normals(normals)
         .uvs(uvs)
         .triangleCount(triangleCount)
-        .triangles32(indices)
-        .build()
-    orientation.getQuatsAsFloat(tangents, vertexCount)
-    orientation.destroy()
+        .triangles(indices)
+        .build()!!
+    orientation.use { it.getQuats(tangents, vertexCount) }
 
     val vb = VertexBuffer.Builder()
         .vertexCount(vertexCount)
@@ -98,7 +93,7 @@ private fun MeshData.upload(engine: Engine): MeshHandles {
 
     val ib = IndexBuffer.Builder()
         .indexCount(indices.size)
-        .bufferType(IndexBuffer.Builder.IndexType.UINT)
+        .bufferType(IndexBuffer.IndexType.UINT)
         .build(engine)
     ib.setBuffer(engine, indices.toBytes())
 
@@ -139,9 +134,26 @@ internal fun Mesh(
     // A hidden enclosing Group hides its whole subtree.
     val effectiveVisible = visible && LocalGroupVisible.current
 
-    val entity = remember(mesh, material, castShadows, receiveShadows) {
-        MeshRenderable(engine, mesh, material, castShadows, receiveShadows)
-    }.entity
+    val handles = rememberOwned(engine, mesh, create = { mesh.upload(engine) }) {
+        engine.destroy(it.vertexBuffer)
+        engine.destroy(it.indexBuffer)
+    }
+
+    val entity = rememberOwned(engine, handles, material, castShadows, receiveShadows,
+                               dependsOn = listOf(handles, material), create = {
+        engine.entityManager.create().also { e ->
+            RenderableManager.Builder(1)
+                .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, handles.vertexBuffer, handles.indexBuffer)
+                .material(0, material)
+                .boundingBox(mesh.boundingBox)
+                .castShadows(castShadows)
+                .receiveShadows(receiveShadows)
+                .build(engine, e)
+        }
+    }) { e ->
+        engine.renderableManager.destroy(e)
+        engine.entityManager.destroy(e)
+    }
 
     DisposableEffect(entity) {
         EntityScopeImpl(entity, engine).onCreate()
@@ -152,7 +164,7 @@ internal fun Mesh(
     // destroying it, so toggling visibility is cheap and keeps entity identity stable.
     DisposableEffect(entity, effectiveVisible) {
         if (effectiveVisible) scene.addEntity(entity)
-        onDispose { if (effectiveVisible) scene.removeEntity(entity) }
+        onDispose { if (effectiveVisible) scene.remove(entity) }
     }
 
     DisposableEffect(entity, position, rotation, scale, pivot) {
@@ -175,43 +187,4 @@ internal fun Mesh(
         }
         onDispose { }
     }
-}
-
-/**
- * A mesh's buffers and renderable, destroyed when forgotten *or abandoned* (a composition discarded before it applies
- * runs no DisposableEffect, and a leaked renderable keeps its material instance in use forever). It holds the engine
- * and marks [material] in use, so neither is destroyed under it whatever order Compose tears things down in.
- */
-private class MeshRenderable(
-    private val engine: Engine,
-    mesh: MeshData,
-    private val material: MaterialInstance,
-    castShadows: Boolean,
-    receiveShadows: Boolean,
-) : RememberObserver {
-    private val retention = EngineRetention(engine)
-    private val handles = mesh.upload(engine)
-    val entity: Entity = engine.entityManager.create().also { e ->
-        RenderableManager.Builder(1)
-            .geometry(0, RenderableManager.PrimitiveType.TRIANGLES, handles.vertexBuffer, handles.indexBuffer)
-            .material(0, material)
-            .boundingBox(mesh.boundingBox)
-            .castShadows(castShadows)
-            .receiveShadows(receiveShadows)
-            .build(engine, e)
-        MaterialLifetimes.use(material)
-    }
-
-    override fun onRemembered() {}
-
-    override fun onForgotten() {
-        engine.renderableManager.destroy(entity)
-        engine.entityManager.destroy(entity)
-        MaterialLifetimes.unuse(material)
-        engine.destroyVertexBuffer(handles.vertexBuffer)
-        engine.destroyIndexBuffer(handles.indexBuffer)
-        retention.onForgotten()
-    }
-
-    override fun onAbandoned() = onForgotten()
 }

@@ -5,7 +5,7 @@ import io.github.erkko68.filament.InternalFilamentApi
 // Common half of the skiko-style interop: API classes live in commonMain and call the Fila* C API
 // through `external fun`s declared next to them, named like the C symbol. JVM/Android bind them
 // through generated JNI glue, Kotlin/Native through [ExternalSymbolName], web by global name.
-// See docs/bindings.md.
+// See docs/internals/bindings.md.
 
 /** Address of a native object: `Long` on JVM, Android and Native; a wasm32 address (`Int`) on web. */
 @InternalFilamentApi
@@ -37,6 +37,9 @@ expect class InteropScope() {
     fun toInterop(array: FloatArray?): NativePointer
     fun toInterop(array: DoubleArray?): NativePointer
 
+    /** An array of pointers (`T* const*`, or a `T**` C writes through), as wide as the platform's; read it back with [readPointers]. */
+    fun toInterop(pointers: List<NativePointer>): NativePointer
+
     /** Copies what C wrote at this pointer back into [result] (a no-op where the array was pinned). */
     fun NativePointer.fromInterop(result: ByteArray)
     fun NativePointer.fromInterop(result: ShortArray)
@@ -60,6 +63,18 @@ fun InteropScope.toInterop(string: String?): NativePointer =
 @InternalFilamentApi
 expect fun FloatArray.readF32(index: Int): Float
 
+/** A copy of [count] ints of an array C owns (a borrowed `const FilaEntity*`). */
+@InternalFilamentApi
+expect fun readInts(ptr: NativePointer, count: Int): IntArray
+
+/** A copy of [count] floats of an array C owns (math mirrors: a `const FilaMat4f*` is 16 per matrix). */
+@InternalFilamentApi
+expect fun readFloats(ptr: NativePointer, count: Int): FloatArray
+
+/** A copy of [count] pointers of an array C owns (`T* const*`, `const char* const*`). */
+@InternalFilamentApi
+expect fun readPointers(ptr: NativePointer, count: Int): List<NativePointer>
+
 /** Calls [block] with a `const char*` copy of this string, valid for the call. */
 @InternalFilamentApi
 inline fun <R> String?.useCString(block: (NativePointer) -> R): R = interopScope { block(toInterop(this@useCString)) }
@@ -76,6 +91,8 @@ expect fun stringFromInterop(ptr: NativePointer): String?
 @InternalFilamentApi
 expect object Callbacks {
     fun register(once: Boolean, fn: (arg: NativePointer) -> Unit): NativePointer
+    /** [register] for [userStatus] and [argUserStatus]: the lambda also gets the `AsyncCallStatus` ordinal. */
+    fun registerStatus(once: Boolean, fn: (arg: NativePointer, status: Int) -> Unit): NativePointer
     fun release(userData: NativePointer)
 
     /** `void (*)(void* userData)`. */
@@ -83,6 +100,12 @@ expect object Callbacks {
 
     /** `void (*)(T* arg, void* userData)`. */
     val argUser: NativePointer
+
+    /** `void (*)(void* userData, AsyncCallStatus status)`. */
+    val userStatus: NativePointer
+
+    /** `void (*)(T* arg, void* userData, AsyncCallStatus status)`. */
+    val argUserStatus: NativePointer
 
     /** FilaBufferCallback, `void (*)(void* buffer, size_t size, void* userData)`: the lambda gets the buffer. */
     val keepBuffer: NativePointer
@@ -105,6 +128,16 @@ inline fun <T> interopScope(block: InteropScope.() -> T): T {
         return scope.block()
     } finally {
         scope.release()
+    }
+}
+
+// A native object from [create] for the duration of [block], destroyed afterwards.
+internal inline fun <T> withHandle(create: () -> NativePointer, destroy: (NativePointer) -> Unit, block: (NativePointer) -> T): T {
+    val handle = create()
+    try {
+        return block(handle)
+    } finally {
+        destroy(handle)
     }
 }
 

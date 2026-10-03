@@ -30,7 +30,7 @@ import java.util.WeakHashMap
 
 // GPU path for Nucleus windows on Linux and Windows, whose Compose scene draws with GL (desktop
 // GL on EGL for Linux, ANGLE's GLES on D3D11 for Windows). Filament cannot share that context
-// directly, so c/filament/cpp/Interop.cpp gives it one it can share (FilaGpuShare) and textures
+// directly, so c/filament/interop/FilaInterop.cpp gives it one it can share (FilaGpuShare) and textures
 // the window imports without a copy (FilaGpuTexture):
 //  - Linux: a GLES context on the window's EGLDisplay; textures go to Nucleus as EGLImages.
 //    Needs the EGL build of Filament (the Linux source recipe in build-logic).

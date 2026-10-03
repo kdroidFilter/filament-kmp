@@ -73,7 +73,7 @@ internal fun NucleusTextureSurface(
     DisposableEffect(targets) {
         onDispose {
             inFlight.value?.let { frame ->
-                engine.destroyFence(frame.fence)
+                engine.destroy(frame.fence)
                 frame.target.afterRender()
             }
             inFlight.value = null
@@ -85,7 +85,7 @@ internal fun NucleusTextureSurface(
         val frame = inFlight.value ?: return true
         if (frame.fence.wait(Fence.Mode.FLUSH, timeoutNanos) == Fence.FenceStatus.TIMEOUT_EXPIRED) return false
         inFlight.value = null
-        engine.destroyFence(frame.fence)
+        engine.destroy(frame.fence)
         frame.target.afterRender()
         shown = targets.indexOf(frame.target)
         frame.target.controller.markFrameAvailable()

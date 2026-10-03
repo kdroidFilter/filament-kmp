@@ -1,5 +1,6 @@
 package io.github.erkko68.filament
 
+import io.github.erkko68.filament.capi.*
 import io.github.erkko68.filament.interop.*
 
 /**
@@ -49,6 +50,23 @@ class SwapChain @InternalFilamentApi constructor(
     }
 
     companion object {
+        /** [Engine.createSwapChain] flag: a transparent swap chain. */
+        const val CONFIG_TRANSPARENT: Long = 0x1
+        /** [Engine.createSwapChain] flag: the swap chain can be read back (see [Renderer.readPixels]). */
+        const val CONFIG_READABLE: Long = 0x2
+        /** [Engine.createSwapChain] flag: the native window is an XCB window, not XLIB. */
+        const val CONFIG_ENABLE_XCB: Long = 0x4
+        /** [Engine.createSwapChain] flag: the native window is a CVPixelBufferRef (Metal). */
+        const val CONFIG_APPLE_CVPIXELBUFFER: Long = 0x8
+        /** [Engine.createSwapChain] flag: an sRGB swap chain; see [isSRGBSwapChainSupported]. */
+        const val CONFIG_SRGB_COLORSPACE: Long = 0x10
+        /** [Engine.createSwapChain] flag: the swap chain has a stencil component. */
+        const val CONFIG_HAS_STENCIL_BUFFER: Long = 0x20
+        /** [Engine.createSwapChain] flag: a protected swap chain; see [isProtectedContentSupported]. */
+        const val CONFIG_PROTECTED_CONTENT: Long = 0x40
+        /** [Engine.createSwapChain] flag: a 4x multisampled swap chain; see [isMSAASwapChainSupported]. */
+        const val CONFIG_MSAA_4_SAMPLES: Long = 0x80
+
         /**
          * Checks if protected content (DRM) rendering is supported on this platform.
          *
@@ -90,7 +108,7 @@ class SwapChain @InternalFilamentApi constructor(
      *
      * @return The native window object, or null if not available
      */
-    val nativeWindow: Any? get() = window.takeIf { it != NullPointer }
+    val nativeWindow: NativePointer? get() = FilaSwapChain_getNativeWindow(nativeHandle).takeIf { it != NullPointer }
 
     // One registry entry per callback kind, released only when the swapchain is destroyed:
     // releasing what the backend may still call for an in-flight frame would drop the callback.
@@ -146,11 +164,11 @@ class SwapChain @InternalFilamentApi constructor(
     fun setFrameScheduledCallback(callback: (() -> Unit)? = null) {
         scheduled = callback
         if (callback == null) {
-            FilaSwapChain_setFrameScheduledCallback(nativeHandle, NullPointer, NullPointer, NullPointer)
+            FilaSwapChain_setFrameScheduledCallback(nativeHandle, NullPointer, NullPointer, NullPointer, 0L)
             return
         }
         if (scheduledId == NullPointer) scheduledId = Callbacks.register(once = false) { _ -> scheduled?.invoke() }
-        FilaSwapChain_setFrameScheduledCallback(nativeHandle, NullPointer, Callbacks.userOnly, scheduledId)
+        FilaSwapChain_setFrameScheduledCallback(nativeHandle, NullPointer, Callbacks.userOnly, scheduledId, 0L)
     }
 
     // Called once the swapchain is destroyed and no further frame callbacks can fire.
@@ -174,13 +192,13 @@ class SwapChain @InternalFilamentApi constructor(
      * Returns whether this SwapChain supports the [setFrameRate] API.
      *
      * When a SwapChain is newly created, the surface capability may not yet be determined
-     * by the underlying OS, in which case this returns false. Once the platform completes surface
-     * connection, this method authoritatively returns true or false.
+     * by the underlying OS, in which case this returns INDETERMINATE. Once the platform completes surface
+     * connection, this method authoritatively returns TRUE or FALSE.
      *
-     * @return true if [setFrameRate] is definitively supported, false otherwise
+     * @return TRUE or FALSE once known, INDETERMINATE until then
      */
-    @PlatformGap(platforms = [FilamentPlatform.WEB], behavior = "returns false — display frame rate switching is not supported on web; pacing is browser-managed.")
-    val isFrameRateChangeSupported: Boolean get() = FilaSwapChain_isFrameRateChangeSupported(nativeHandle)
+    @PlatformGap(platforms = [FilamentPlatform.WEB], behavior = "returns FALSE — display frame rate switching is not supported on web; pacing is browser-managed.")
+    val isFrameRateChangeSupported: Engine.FeatureState get() = Engine.FeatureState.entries[FilaSwapChain_isFrameRateChangeSupported(nativeHandle)]
 
     /**
      * Sets the intended frame rate for this SwapChain.
@@ -204,27 +222,3 @@ class SwapChain @InternalFilamentApi constructor(
     }
 
 }
-
-@ExternalSymbolName("FilaSwapChain_isFrameRateChangeSupported")
-private external fun FilaSwapChain_isFrameRateChangeSupported(swapChain: NativePointer): Boolean
-
-@ExternalSymbolName("FilaSwapChain_isFrameScheduledCallbackSet")
-private external fun FilaSwapChain_isFrameScheduledCallbackSet(swapChain: NativePointer): Boolean
-
-@ExternalSymbolName("FilaSwapChain_isMSAASwapChainSupported")
-private external fun FilaSwapChain_isMSAASwapChainSupported(engine: NativePointer, samples: Int): Boolean
-
-@ExternalSymbolName("FilaSwapChain_isProtectedContentSupported")
-private external fun FilaSwapChain_isProtectedContentSupported(engine: NativePointer): Boolean
-
-@ExternalSymbolName("FilaSwapChain_isSRGBSwapChainSupported")
-private external fun FilaSwapChain_isSRGBSwapChainSupported(engine: NativePointer): Boolean
-
-@ExternalSymbolName("FilaSwapChain_setFrameCompletedCallback")
-private external fun FilaSwapChain_setFrameCompletedCallback(swapChain: NativePointer, handler: NativePointer, callback: NativePointer, userData: NativePointer)
-
-@ExternalSymbolName("FilaSwapChain_setFrameRate")
-private external fun FilaSwapChain_setFrameRate(swapChain: NativePointer, frameRate: Float, compatibility: Int, strategy: Int)
-
-@ExternalSymbolName("FilaSwapChain_setFrameScheduledCallback")
-private external fun FilaSwapChain_setFrameScheduledCallback(swapChain: NativePointer, handler: NativePointer, callback: NativePointer, userData: NativePointer)

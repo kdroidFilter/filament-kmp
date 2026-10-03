@@ -3,16 +3,16 @@ package io.github.erkko68.filament.utils
 import io.github.erkko68.filament.Texture
 import io.github.erkko68.filament.utils.testutils.UtilsRenderingTestFixture
 import kotlin.test.Test
-import kotlin.test.assertNotNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 /**
- * Real-backend coverage for IBLPrefilter run() bindings, driven by a synthetic
+ * Real-backend coverage for the IBLPrefilter filters, driven by a synthetic
  * in-memory equirectangular texture (no external HDR asset needed).
  */
 class IBLPrefilterRenderingTest : UtilsRenderingTestFixture() {
     @Test
-    fun testEquirectangularToCubemapAndSpecularFilterRun() {
+    fun testFiltersInvoke() {
         val engine = engine ?: return
 
         // 16x8 (2:1) RGBA16F equirectangular source, filled with mid-grey half-floats.
@@ -40,17 +40,32 @@ class IBLPrefilterRenderingTest : UtilsRenderingTestFixture() {
         engine.flushAndWait()
 
         val context = IBLPrefilterContext(engine)
-        val cubemap = EquirectangularToCubemap(context).run(equirect)
-        assertNotNull(cubemap)
-        assertTrue(engine.isValidTexture(cubemap))
+        val cubemap: Texture
+        val filtered: Texture
+        val irradianceOut: Texture
+        IBLPrefilterContext.EquirectangularToCubemap(context).use { toCubemap ->
+            // Few samples: default 1024 overruns Mocha's 30s timeout under CI's SwiftShader.
+            IBLPrefilterContext.SpecularFilter(context, IBLPrefilterContext.SpecularFilter.Config(sampleCount = 16)).use { specular ->
+                IBLPrefilterContext.IrradianceFilter(context, IBLPrefilterContext.IrradianceFilter.Config(sampleCount = 16)).use { irradiance ->
+                    cubemap = toCubemap(equirect)
+                    assertTrue(engine.isValid(cubemap))
 
-        val filtered = SpecularFilter(context).run(cubemap)
-        assertNotNull(filtered)
-
-        engine.flushAndWait()
+                    filtered = specular(IBLPrefilterContext.SpecularFilter.Options(lodOffset = 2f), cubemap)
+                    assertTrue(engine.isValid(filtered))
+                    engine.destroy(specular(cubemap))
+                    // Given an output texture, the filters write into it and hand it back.
+                    irradianceOut = irradiance(cubemap)
+                    assertSame(irradianceOut, irradiance(cubemap, irradianceOut))
+                    val options = IBLPrefilterContext.IrradianceFilter.Options(lodOffset = 1f, generateMipmap = false)
+                    assertSame(irradianceOut, irradiance(options, cubemap, irradianceOut))
+                    engine.flushAndWait()
+                }
+            }
+        }
         context.destroy()
-        engine.destroyTexture(filtered)
-        engine.destroyTexture(cubemap)
-        engine.destroyTexture(equirect)
+        engine.destroy(irradianceOut)
+        engine.destroy(filtered)
+        engine.destroy(cubemap)
+        engine.destroy(equirect)
     }
 }

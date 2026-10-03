@@ -4,7 +4,7 @@ package io.github.erkko68.filament.compose.internal
 
 import io.github.erkko68.filament.interop.NativePointer
 
-// c/filament/c/Interop.h, for the Nucleus GPU surfaces. JVM-only externals: the root generateBindings task
+// c/filament/interop/FilaInterop.h, for the Nucleus GPU surfaces. JVM-only externals: the root generateBindings task
 // writes their JNI forwarders from this file (jniSources); NativePointer is the raw address (0 = NULL).
 
 internal external fun FilaGpuShare_create(hostEglDisplay: NativePointer): NativePointer

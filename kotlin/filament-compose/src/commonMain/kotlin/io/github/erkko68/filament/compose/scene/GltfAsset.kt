@@ -2,21 +2,23 @@ package io.github.erkko68.filament.compose.scene
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import io.github.erkko68.filament.Engine
-import io.github.erkko68.filament.compose.EngineRetention
 import io.github.erkko68.filament.compose.LocalFilamentEngine
 import io.github.erkko68.filament.compose.noFilamentEngine
+import io.github.erkko68.filament.compose.internal.rememberOwned
 import io.github.erkko68.filament.gltfio.AssetLoader
 import io.github.erkko68.filament.gltfio.FilamentAsset
+import io.github.erkko68.filament.gltfio.ResourceConfiguration
 import io.github.erkko68.filament.gltfio.ResourceLoader
+import io.github.erkko68.filament.gltfio.TextureProvider
+import io.github.erkko68.filament.gltfio.createKtx2Provider
+import io.github.erkko68.filament.gltfio.createStbProvider
 import kotlin.coroutines.cancellation.CancellationException
 
 /**
@@ -56,12 +58,17 @@ class GltfAsset internal constructor(
     /** The loader uploading this asset's resources, until the load completes or is abandoned. */
     internal var resourceLoader: ResourceLoader? = null
 
+    /** Texture providers [resourceLoader] decodes with; destroyed after it. */
+    internal var textureProviders: List<TextureProvider> = emptyList()
+
     /** Cancels an unfinished load and destroys its loader; a no-op once released. */
     internal fun releaseResourceLoader() {
         val loader = resourceLoader ?: return
         resourceLoader = null
         if (!isReady) loader.asyncCancelLoad()
         loader.destroy()
+        textureProviders.forEach { it.destroy() }
+        textureProviders = emptyList()
     }
 }
 
@@ -84,7 +91,14 @@ internal fun rememberGltfAsset(
     val gltfioContext = rememberGltfioContext(engine)
     val assetLoader = gltfioContext.assetLoader
 
-    val gltfAsset = remember(bytes, assetLoader) { OwnedGltfAsset(engine, bytes) }.asset
+    // The loader is destroyed with the asset, not in the loading coroutine's `finally`, which only
+    // runs after a composition-owned engine may already be gone.
+    val gltfAsset = rememberOwned(engine, bytes, gltfioContext, dependsOn = listOf(gltfioContext), create = {
+        assetLoader.createAsset(bytes)?.let { GltfAsset(it, assetLoader) }
+    }) {
+        it.releaseResourceLoader()
+        assetLoader.destroyAsset(it.filamentAsset)
+    }
 
     if (gltfAsset == null) {
         // Bytes were produced but failed to parse — report once, keyed on the bytes.
@@ -97,7 +111,13 @@ internal fun rememberGltfAsset(
     }
 
     LaunchedEffect(gltfAsset) {
-        val resourceLoader = ResourceLoader(engine, true).also { gltfAsset.resourceLoader = it }
+        val resourceLoader = ResourceLoader(ResourceConfiguration(engine, normalizeSkinningWeights = true))
+        gltfAsset.resourceLoader = resourceLoader
+        gltfAsset.textureProviders = listOf(createStbProvider(engine), createKtx2Provider(engine)).also { (stb, ktx2) ->
+            resourceLoader.addTextureProvider("image/png", stb)
+            resourceLoader.addTextureProvider("image/jpeg", stb)
+            resourceLoader.addTextureProvider("image/ktx2", ktx2)
+        }
         resourceLoader.asyncBeginLoad(gltfAsset.filamentAsset)
         while (resourceLoader.asyncGetLoadProgress() < 1.0f) {
             resourceLoader.asyncUpdateLoad()
@@ -168,30 +188,4 @@ fun rememberGltfAsset(
         }
     }
     return bytes?.let { rememberGltfAsset(engine, it, onError) }
-}
-
-/**
- * A parsed glTF asset (null when the bytes don't parse), destroyed when forgotten *or abandoned*: an asset created in
- * a composition that is then discarded runs no DisposableEffect and would leak its material instances, which makes
- * Filament panic when the engine goes. It holds its own [GltfioContext] reference, so the context outlives it
- * whatever order Compose forgets or abandons the two in. Its loader goes here too, not in the loading coroutine's
- * `finally`, which only runs after the asset and a composition-owned engine are gone.
- */
-private class OwnedGltfAsset(private val engine: Engine, bytes: ByteArray) : RememberObserver {
-    private val retention = EngineRetention(engine)
-    private val loader = GltfioContext.acquire(engine).assetLoader
-    val asset: GltfAsset? = loader.createAsset(bytes)?.let { GltfAsset(it, loader) }
-
-    override fun onRemembered() {}
-
-    override fun onForgotten() {
-        asset?.let {
-            it.releaseResourceLoader()
-            loader.destroyAsset(it.filamentAsset)
-        }
-        GltfioContext.release(engine)
-        retention.onForgotten()
-    }
-
-    override fun onAbandoned() = onForgotten()
 }

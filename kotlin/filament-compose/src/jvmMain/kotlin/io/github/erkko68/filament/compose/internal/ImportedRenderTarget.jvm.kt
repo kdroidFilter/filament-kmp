@@ -16,7 +16,7 @@ internal class ImportedRenderTarget(engine: Engine, nativeTexture: Long, size: I
         .sampler(Texture.Sampler.SAMPLER_2D)
         .format(Texture.InternalFormat.RGBA8)
         .usage(Texture.Usage.COLOR_ATTACHMENT or Texture.Usage.SAMPLEABLE)
-        .importTexture(nativeTexture)
+        .import(nativeTexture)
         .build(engine)
     private val depth: Texture = Texture.Builder()
         .width(size.width).height(size.height).levels(1)
@@ -30,8 +30,8 @@ internal class ImportedRenderTarget(engine: Engine, nativeTexture: Long, size: I
         .build(engine)
 
     fun destroy(engine: Engine) {
-        engine.destroyRenderTarget(renderTarget)
-        engine.destroyTexture(color)
-        engine.destroyTexture(depth)
+        engine.destroy(renderTarget)
+        engine.destroy(color)
+        engine.destroy(depth)
     }
 }

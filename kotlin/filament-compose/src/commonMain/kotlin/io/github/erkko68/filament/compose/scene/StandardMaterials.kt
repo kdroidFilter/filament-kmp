@@ -1,9 +1,7 @@
 package io.github.erkko68.filament.compose.scene
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Stable
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.Material
@@ -11,7 +9,8 @@ import io.github.erkko68.filament.MaterialInstance
 import io.github.erkko68.filament.Texture
 import io.github.erkko68.filament.TextureSampler
 import io.github.erkko68.filament.compose.LocalFilamentEngine
-import io.github.erkko68.filament.compose.RetainEngine
+import io.github.erkko68.filament.compose.internal.Owned
+import io.github.erkko68.filament.compose.internal.rememberOwned
 import io.github.erkko68.filament.compose.noFilamentEngine
 
 /**
@@ -56,6 +55,9 @@ enum class StandardMaterial {
         Emissive -> EmbeddedMaterials.standardEmissive
         Transparent -> EmbeddedMaterials.standardTransparent
     }
+
+    internal fun build(engine: Engine): Material =
+        checkNotNull(Material.Builder().payload(payload()).build(engine)) { "Bundled $name material failed to build" }
 }
 
 /**
@@ -68,13 +70,14 @@ enum class StandardMaterial {
 // write-once cache never observed as state.
 @Stable
 internal class StandardMaterialCache(val engine: Engine) {
-    private val cache = HashMap<StandardMaterial, Material>()
+    private val cache = HashMap<StandardMaterial, Owned<Material>>()
 
-    fun get(type: StandardMaterial): Material =
-        cache.getOrPut(type) { Material.Builder().payload(type.payload()).build(engine) }
+    fun get(type: StandardMaterial): Material = cache.getOrPut(type) {
+        Owned(type.build(engine), listOf(engine)) { engine.destroy(it) }
+    }.value
 
     fun dispose() {
-        for (material in cache.values) MaterialLifetimes.destroyMaterial(engine, material)
+        for (material in cache.values) material.release()
         cache.clear()
     }
 }
@@ -105,14 +108,9 @@ fun rememberStandardMaterial(
         cache.get(type)
     } else {
         // Hoisted engine outside a scene: this call site owns the material.
-        RetainEngine(engine)
-        val material = remember(engine, type) {
-            Material.Builder().payload(type.payload()).build(engine)
+        rememberOwned(engine, type, create = { type.build(engine) }) {
+            engine.destroy(it)
         }
-        DisposableEffect(material) {
-            onDispose { MaterialLifetimes.destroyMaterial(engine, material) }
-        }
-        material
     }
 }
 

@@ -1,8 +1,13 @@
 package io.github.erkko68.filament.compose.scene
 
+import io.github.erkko68.filament.QualityLevel
+import io.github.erkko68.filament.ToneMapper
 import io.github.erkko68.filament.View
+import io.github.erkko68.filament.Dithering as FilamentDithering
+import io.github.erkko68.filament.AntiAliasing as FilamentAntiAliasing
 import io.github.erkko68.filament.compose.testutils.ComposeTestFixture
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
@@ -59,7 +64,7 @@ class PostProcessingApplyTest : ComposeTestFixture() {
         assertTrue(view.depthOfFieldOptions.enabled)
         assertEquals(2f, view.depthOfFieldOptions.cocScale)
         assertTrue(view.dynamicResolutionOptions.enabled)
-        assertEquals(0.5f, view.dynamicResolutionOptions.minScale)
+        assertContentEquals(floatArrayOf(0.5f, 0.5f), view.dynamicResolutionOptions.minScale)
     }
 
     @Test
@@ -69,13 +74,13 @@ class PostProcessingApplyTest : ComposeTestFixture() {
             .applyTo(view, engine)
         assertTrue(view.multiSampleAntiAliasingOptions.enabled)
         assertEquals(8, view.multiSampleAntiAliasingOptions.sampleCount)
-        assertEquals(View.AntiAliasing.FXAA, view.antiAliasing)
+        assertEquals(FilamentAntiAliasing.FXAA, view.antiAliasing)
         assertTrue(view.temporalAntiAliasingOptions.enabled)
 
         PostProcessing(antiAliasing = AntiAliasing(msaaEnabled = false, fxaaEnabled = false, taaEnabled = false))
             .applyTo(view, engine)
         assertFalse(view.multiSampleAntiAliasingOptions.enabled)
-        assertEquals(View.AntiAliasing.NONE, view.antiAliasing)
+        assertEquals(FilamentAntiAliasing.NONE, view.antiAliasing)
         assertFalse(view.temporalAntiAliasingOptions.enabled)
     }
 
@@ -97,9 +102,38 @@ class PostProcessingApplyTest : ComposeTestFixture() {
         val view = newView()
         val grading = PostProcessing(colorGrade = ColorGrade(contrast = 1.2f)).applyTo(view, engine)
         assertNotNull(grading, "a ColorGrading should be allocated when colorGrade is set")
-        engine.destroyColorGrading(grading)
+        engine.destroy(grading)
 
         val none = PostProcessing(colorGrade = null).applyTo(view, engine)
         assertNull(none, "no ColorGrading should be allocated when colorGrade is null")
+    }
+
+    @Test
+    fun ditheringAndRenderQualityApply() {
+        val view = newView()
+        PostProcessing(dithering = Dithering(FilamentDithering.NONE), renderQuality = RenderQuality(QualityLevel.LOW))
+            .applyTo(view, engine)
+        assertEquals(FilamentDithering.NONE, view.dithering)
+        assertEquals(QualityLevel.LOW, view.renderQuality.hdrColorBuffer)
+
+        // Null restores the native defaults.
+        PostProcessing().applyTo(view, engine)
+        assertEquals(FilamentDithering.TEMPORAL, view.dithering)
+        assertEquals(QualityLevel.HIGH, view.renderQuality.hdrColorBuffer)
+    }
+
+    @Test
+    fun everyToneMappingBuildsAColorGrading() {
+        val view = newView()
+        val toneMappings = listOf(
+            ToneMapping.ACES, ToneMapping.ACESLegacy, ToneMapping.Filmic, ToneMapping.PBRNeutral, ToneMapping.GT7,
+            ToneMapping.Linear, ToneMapping.DisplayRange, ToneMapping.Agx(ToneMapper.Agx.AgxLook.PUNCHY),
+            ToneMapping.Generic(contrast = 1.4f),
+        )
+        for (toneMapping in toneMappings) {
+            val grading = assertNotNull(PostProcessing(colorGrade = ColorGrade(toneMapping = toneMapping)).applyTo(view, engine), "$toneMapping")
+            assertTrue(engine.isValid(grading))
+            engine.destroy(grading)
+        }
     }
 }

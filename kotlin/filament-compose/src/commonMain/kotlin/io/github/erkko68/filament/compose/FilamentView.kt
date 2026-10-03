@@ -6,13 +6,14 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import io.github.erkko68.filament.Renderer
-import io.github.erkko68.filament.View.BlendMode
+import io.github.erkko68.filament.BlendMode
 import io.github.erkko68.filament.compose.internal.FilamentSurface
 import io.github.erkko68.filament.compose.scene.CameraState
 import io.github.erkko68.filament.compose.scene.PostProcessing
 import io.github.erkko68.filament.compose.scene.Shadows
 import io.github.erkko68.filament.compose.scene.applyTo
 import io.github.erkko68.filament.compose.scene.rememberCameraState
+import io.github.erkko68.filament.compose.internal.rememberOwned
 
 /**
  * A viewport onto a [FilamentScene]. Each `FilamentView` owns one Filament `View`, `Camera`,
@@ -65,12 +66,15 @@ fun FilamentView(
     renderingEnabled: Boolean = true,
 ) {
     val engine        = scene.engine
-    RetainEngine(engine)
     val filamentScene = scene.scene
 
-    val renderer = remember(engine) { engine.createRenderer() }
-    val view     = remember(engine) { engine.createView() }
-    val camera   = remember(engine) { engine.createCamera() }
+    // The scene is owned by the FilamentScene handle, not the view.
+    val renderer = rememberOwned(engine, create = { engine.createRenderer() }) { engine.destroy(it) }
+    val view     = rememberOwned(engine, dependsOn = listOf(filamentScene), create = { engine.createView() }) { engine.destroy(it) }
+    val camera   = rememberOwned(engine, create = { engine.createCamera(engine.entityManager.create()) }) {
+        engine.destroyCameraComponent(it.entity)
+        engine.entityManager.destroy(it.entity)
+    }
 
     // Wire the scene/camera onto the view and apply the render flags. A keyed effect with a no-op
     // onDispose, not a `remember` block: mutating Filament objects is a side effect, and it belongs
@@ -101,7 +105,7 @@ fun FilamentView(
     // ColorGrading (if any) is destroyed on dispose / before re-apply.
     DisposableEffect(view, postProcessing, engine) {
         val colorGrading = postProcessing.applyTo(view, engine)
-        onDispose { colorGrading?.let { engine.destroyColorGrading(it) } }
+        onDispose { colorGrading?.let { engine.destroy(it) } }
     }
 
     // Expose the live View/Renderer through the hoisted handle.
@@ -128,15 +132,6 @@ fun FilamentView(
         { aspect ->
             cameraState.aspect = aspect
             cameraState.snapshot().applyTo(camera, aspect)
-        }
-    }
-
-    // The scene is owned by the FilamentScene handle, not the view.
-    DisposableEffect(engine) {
-        onDispose {
-            engine.destroyRenderer(renderer)
-            engine.destroyView(view)
-            engine.destroyCamera(camera)
         }
     }
 

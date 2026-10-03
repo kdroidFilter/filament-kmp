@@ -19,7 +19,7 @@ composeCompiler {
 }
 
 // Built-in materials, precompiled with `matc -p all -a all` (runtime compilation isn't available on web);
-// regenerate on each filaVersion bump, see docs/upgrading-filament.md.
+// regenerate on each filaVersion bump, see docs/internals/upgrading-filament.md.
 val generateEmbeddedMaterials = registerEmbeddedResources(
     taskName = "generateEmbeddedMaterials",
     inputDir = "src/commonMain/materials",
@@ -63,8 +63,7 @@ kotlin {
             compileOnly(libs.nucleus.decoratedWindowTao)
         }
         commonTest.dependencies {
-            @OptIn(org.jetbrains.compose.ExperimentalComposeLibrary::class)
-            implementation(compose.uiTest)
+            implementation(libs.compose.uiTest)
         }
         // Android instrumented tests: runComposeUiTest needs a host Activity, supplied by the
         // ui-test-manifest artifact (it merges a debug AndroidManifest with a test ComponentActivity).

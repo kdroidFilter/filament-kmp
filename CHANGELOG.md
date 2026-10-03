@@ -13,6 +13,39 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-10-03
+
+Synced with upstream 0.7.0 and 0.7.1 (this fork publishes no 0.7.0): read 0.7.0's migration guide when coming from 0.6.x. Nucleus GPU surfaces, the macOS x64 runtime and the EGL Linux build are kept.
+
+### Changed
+- **Filament 1.77.2** upstream; `MATERIAL_VERSION` is unchanged, so `.filamat` files keep working.
+- **`entities` is now `allEntities`** on `RenderableManager`, `LightManager` and `TransformManager`, following C++'s `getAllEntities()`.
+
+### Added
+- **`RenderableManager.setGeometryAt` without `offset`/`count`**: draws the whole buffer.
+- **`Fence.WAIT_FOR_EVER`**, C++'s new name for `FENCE_WAIT_FOR_EVER`.
+- **Constants and enum values the headers declare**: `SwapChain.CONFIG_*`, `Renderer.FrameInfo.INVALID`/`PENDING`, `VertexAttribute.MORPH_*`, `AttachmentPoint.COLOR0`.
+
+## [0.7.0] — 2026-10-01
+
+> [!WARNING]
+> **Source-breaking release.** Follow the **[migration guide](docs/migration/from-0.6.0.md)**; it lists every API change, addition and fix.
+
+### Changed
+- **The API is generated from Filament's C++ headers**: every platform calls one `Fila*` C API, and the Kotlin API follows C++'s names, owners and defaults — see [The Generated C API](docs/internals/c-api.md).
+- **Web runs on our own wasm runtime**: replace `filament.js`/`.wasm` with `filament-kmp.js`/`.wasm` from the GitHub release — see [Getting Started → Web](docs/guide/getting-started.md#web--wasm).
+- **Android no longer uses upstream's AARs**: it runs on the same C API over JNI.
+- **Improved CPU readback on Compose Desktop** (the default): each frame reads back through `Renderer` into its own Skia image.
+
+### Added
+- **Windows on ARM** desktop runtime (`filament-jni-runtime-windows-arm64`); desktop now needs only JDK 17.
+- **Experimental GPU-to-GPU frame sharing on Compose Desktop** (macOS, Windows, Linux): opt in with `FilamentComposeDesktop.isGpuToGpuFrameSharingEnabled`.
+- **`renderingEnabled` on `FilamentView` / `FilamentSceneView`**: `false` stops rendering and keeps the last frame.
+
+### Fixed
+- **Compose manages the Filament lifecycle correctly**: views work inside a `LazyColumn` and other subcompositions, and teardown no longer aborts the app. Reported by [@kdroidFilter](https://github.com/kdroidFilter) in [#166](https://github.com/Erkko68/filament-kmp/pull/166).
+- **Filament panics log their reason** (message and native stack) on desktop and Android before aborting, instead of failing silently.
+
 ## [0.6.4] — 2026-09-30
 
 ### Fixed
@@ -93,7 +126,7 @@ Rebuild your `.filamat` files with the 1.77.1 `matc`. No source changes.
 
 ### Added
 - **Filament 1.76.0**: `Engine.Config.enableMultipleDirectionalLights` adds up to four extra (unshadowed) directional lights.
-- **Web bindings for everything filament.js 1.76.0 exposes** (`filament`, `gltfio`): `Fence`, skinning/morphing buffers, `Renderer.readPixels`/`copyFrame`, a real `ResourceLoader` and more now reach the engine — see [Platform notes](docs/platform-notes.md).
+- **Web bindings for everything filament.js 1.76.0 exposes** (`filament`, `gltfio`): `Fence`, skinning/morphing buffers, `Renderer.readPixels`/`copyFrame`, a real `ResourceLoader` and more now reach the engine — see [Platform notes](docs/guide/platform-notes.md).
 - **`AutoCloseable` on self-destroying types** (`filament`, `gltfio`, `filament-utils`): `Engine`, `Manipulator`, `ResourceLoader`, `MaterialProvider` and the IBL helpers work with `use { }`.
 - **Missing option-struct fields** (`filament`): `ShadowOptions.polygonOffset*`/`penumbra*Scale`/`maxPenumbraRatio`/`maxSearchRadius`, the same pair on `SoftShadowOptions`, `DepthOfFieldOptions.cocAspectRatio`, three `Engine.Config` debug flags and `AmbientOcclusionOptions.Gtao`.
 - **`KTX1Loader` options default to `Options()`** (`filament-utils`).
@@ -213,7 +246,7 @@ The API changes below break **positional** callers only.
 - **Flight camera speed is finally settable** (`filament-compose`, behavior-breaking): `rememberFlightCameraController` gains `initialMoveSpeed` and `speedSteps` (default 20, was 80) plus `adjustSpeed(steps)` — `maxMoveSpeed` alone did nothing until you scrolled. Scrolling up now speeds up.
 - **`GltfInstance` boxed every morph weight on every recomposition** (`filament-compose`): the effect keyed on `morphWeights?.toList()`, allocating before the gate could skip anything. Compared with `contentEquals` against a remembered copy now. Adds `GltfInstanceLifecycleTest` and `GltfAssetLoadingTest`.
 - **Documented `key()` for dynamic scene contents** (docs): without it, inserting or reordering destroys and rebuilds every entity after the change point — silently. See [Compose Integration](docs/compose/README.md#dynamic-scene-contents-use-key).
-- **Morph weights below four targets did nothing on web** (`filament`): `setMorphWeights` bailed out under four weights, so every 1–3 target model was unanimated. Zero-padded now; a non-zero `offset` returns early rather than writing to slot 0. Four instance-side methods are marked `@PlatformGap` — see [Platform notes](docs/platform-notes.md).
+- **Morph weights below four targets did nothing on web** (`filament`): `setMorphWeights` bailed out under four weights, so every 1–3 target model was unanimated. Zero-padded now; a non-zero `offset` returns early rather than writing to slot 0. Four instance-side methods are marked `@PlatformGap` — see [Platform notes](docs/guide/platform-notes.md).
 - **Unparseable glb bytes threw on `wasmJs` instead of returning null** (`gltfio`): `createAsset`/`createInstancedAsset` were declared non-null following upstream's `filament.d.ts`, but return null on parse failure. Kotlin/JS was unaffected.
 - **`getAnimator()` before resource load handed back a broken `Animator`** (`gltfio`, behavior-breaking): gltfio returns `nullptr` until resources load. `jvm`/`native`/`web` throw `IllegalStateException` naming the fix; Android cannot check.
 - **Flight start orientation was off by a factor of 57** (`filament-compose`, behavior-breaking): `startPitch`/`startYaw` are documented in degrees but were passed as radians. Drop any manual conversion.
@@ -291,7 +324,7 @@ Also check: state-creator parameters now seed initial composition only; `Modifie
 
 ### Added
 - **Filament 1.73.0**: engine upgraded; the DYN variant became a specialization constant. New APIs: `Renderer.setDesiredPresentationTime`/`setRenderingDeadline`, `SwapChain.isFrameRateChangeSupported`/`setFrameRate`, `View.getVisibleRenderableCount`. The web prebuilt is stock upstream again — our colored-penumbra patch landed in 1.73.0.
-- **`@PlatformGap` annotation + binding-coverage table** (all modules): every common API whose platform binding is missing or degraded is annotated and listed in [Platform Notes](docs/platform-notes.md#binding-coverage). All current gaps are on web; Android/iOS/JVM expose the full common API.
+- **`@PlatformGap` annotation + binding-coverage table** (all modules): every common API whose platform binding is missing or degraded is annotated and listed in [Platform Notes](docs/guide/platform-notes.md#api-coverage). All current gaps are on web; Android/iOS/JVM expose the full common API.
 - **Tier C semantic frame tests** (tests): a `FrameProbe` harness renders a lit scene headless and asserts *relations between image regions* (shadow darker than open floor, removing the sun changes the frame) — rasterizer-invariant property checks, not goldens, aimed at the "wrong pixels, no exception" bug class.
 - **Vendored kotlin-math test suite** (tests): upstream's `HalfTest`/`MatrixTest`/`QuaternionTest` now run on every target, guarding the ~5,300-line vendored math library against drift (utils line coverage 2.9% → 28.5%).
 - **Exhaustive enum round-trip tests** (tests): every entry of every gettable enum-typed property is set→get round-tripped on every target, turning the silently-misaligned-enum bug class into a test failure.
@@ -428,10 +461,10 @@ Also check: state-creator parameters now seed initial composition only; `Modifie
 
 ## [0.1.2-beta01] — 2026-05-30
 
-- **JVM/Desktop bindings migrated from JNI to Project Panama (FFM).** The per-module JNI stack is replaced by a single `:java` module that binds the combined `libfilament-c` shared library via the Foreign Function & Memory API (jextract-generated); see [`java/README.md`](java/README.md).
+- **JVM/Desktop bindings migrated from JNI to Project Panama (FFM).** The per-module JNI stack is replaced by a single `:java` module that binds the combined `libfilament-c` shared library via the Foreign Function & Memory API (jextract-generated); see [`java/README.md`](desktop/README.md).
   - **Breaking:** the Desktop/JVM native runtime now requires a **JDK 22+** runtime (the FFM API floor).
   - **Breaking:** the JVM native runtime artifact moved to `io.github.erkko68.filament-ffm:filament-ffm` (pulled in transitively — consumers only need JDK 22+).
-- The Kotlin/JS externals (`:js`) are now **generated at build time** by [Karakum](https://github.com/karakum-team/karakum) from Filament's `filament.d.ts`, replacing the hand-maintained `filament.js.kt`. Because the d.ts under-reports the real `jsbindings.cpp` surface, the build first patches it with a curated overlay (`js/patches/filament.patch.d.ts`) and non-additive corrections (`js/patches/filament.dts-overrides.json`). Nothing generated is committed; see [`js/README.md`](js/README.md). The JS externals now target the kotlin-wrappers types.
+- The Kotlin/JS externals (`:js`) are now **generated at build time** by [Karakum](https://github.com/karakum-team/karakum) from Filament's `filament.d.ts`, replacing the hand-maintained `filament.js.kt`. Because the d.ts under-reports the real `jsbindings.cpp` surface, the build first patches it with a curated overlay (`js/patches/filament.patch.d.ts`) and non-additive corrections (`js/patches/filament.dts-overrides.json`). Nothing generated is committed; see [`js/README.md`](web/README.md). The JS externals now target the kotlin-wrappers types.
   - `scripts/gradle/download_filament_prebuilts.py` now also extracts `filament.d.ts` for the `web` target.
   - `scripts/dev/check-js-bindings.sh` audits the overlay/overrides (not a committed externals file) against `jsbindings.cpp`, and a stale `REPO_ROOT` path (broken when the script moved to `scripts/dev/`) is fixed.
 - Dokka HTML published as the `-javadoc` artifact (replaces empty placeholder jar).
@@ -528,7 +561,9 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.4...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.1...HEAD
+[0.7.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.4...0.7.1
+[0.7.0]: https://github.com/Erkko68/filament-kmp/compare/0.6.0...0.7.0
 [0.6.4]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.3...0.6.4
 [0.6.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.2...0.6.3
 [0.6.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.1...0.6.2

@@ -24,8 +24,8 @@ class LightManagerTest : FilamentTestFixture() {
             screenSpaceContactShadows = false
             stepCount = 16
             maxShadowDistance = 100f
-            elvsm = false
-            blurWidth = 2.0f
+            vsm.elvsm = false
+            vsm.blurWidth = 2.0f
             shadowBulbRadius = 0.05f
             transform = floatArrayOf(1f, 0f, 0f, 0f)
             polygonOffsetConstant = 1.25f
@@ -48,8 +48,8 @@ class LightManagerTest : FilamentTestFixture() {
         assertFalse(options.screenSpaceContactShadows)
         assertEquals(16, options.stepCount)
         assertEquals(100f, options.maxShadowDistance)
-        assertFalse(options.elvsm)
-        assertEquals(2.0f, options.blurWidth)
+        assertFalse(options.vsm.elvsm)
+        assertEquals(2.0f, options.vsm.blurWidth)
         assertEquals(0.05f, options.shadowBulbRadius)
         assertEquals(1f, options.transform[0])
         assertEquals(1.25f, options.polygonOffsetConstant)
@@ -85,9 +85,7 @@ class LightManagerTest : FilamentTestFixture() {
         assertEquals(0.3f, o.maxShadowDistance, 1e-6f)
         assertEquals(-1.0f, o.shadowBulbRadius, 1e-6f)
         assertFalse(o.stable)
-        // lispsm is forced false on every platform to match the Android binding and avoid PCSS
-        // penumbra artifacts (Filament's C++ default is true; overridable via ShadowOptions.lispsm).
-        assertFalse(o.lispsm)
+        assertTrue(o.lispsm)
         assertEquals(0f, o.transform[0], 1e-6f)
         assertEquals(0f, o.transform[1], 1e-6f)
         assertEquals(0f, o.transform[2], 1e-6f)
@@ -97,7 +95,7 @@ class LightManagerTest : FilamentTestFixture() {
         assertEquals(2.0f, o.polygonOffsetSlope, 1e-6f)
         assertEquals(1f, o.penumbraScale, 1e-6f)
         assertEquals(1f, o.penumbraRatioScale, 1e-6f)
-        // 0 means "defer to the View-wide View.SoftShadowOptions" — Filament's own default.
+        // 0 means "defer to the View-wide SoftShadowOptions" — Filament's own default.
         assertEquals(0f, o.maxPenumbraRatio, 1e-6f)
         assertEquals(0f, o.maxSearchRadius, 1e-6f)
     }
@@ -129,6 +127,24 @@ class LightManagerTest : FilamentTestFixture() {
         assertTrue(inst != 0)
 
         assertEquals(LightManager.Type.SUN, lm.getType(inst))
+        assertTrue(lm.isDirectional(inst))
+        assertFalse(lm.isSpotLight(inst))
+        assertEquals(entity, lm.getEntity(inst))
+        assertTrue(entity in lm.allEntities)
+
+        // Shadow options round-trip through the native struct
+        lm.setShadowOptions(inst, LightManager.ShadowOptions().apply {
+            mapSize = 512
+            lispsm = false
+            vsm.blurWidth = 3f
+            cascadeSplitPositions = floatArrayOf(0.2f, 0.4f, 0.6f)
+        })
+        val read = lm.getShadowOptions(inst)
+        assertEquals(512, read.mapSize)
+        assertFalse(read.lispsm)
+        assertEquals(3f, read.vsm.blurWidth)
+        assertEquals(0.4f, read.cascadeSplitPositions[1], 1e-6f)
+        assertEquals(1f, read.transform[3])
 
         // Direction
         lm.setDirection(inst, 1f, 0f, 0f)
@@ -143,6 +159,9 @@ class LightManagerTest : FilamentTestFixture() {
         // Intensity
         lm.setIntensity(inst, 10000f)
         assertEquals(10000f, lm.getIntensity(inst))
+        lm.setIntensity(inst, 100f, 0.5f) // watts × 683 lm/W × efficiency
+        assertEquals(34150f, lm.getIntensity(inst), 0.5f)
+        assertFalse(lm.empty())
 
         // Sun options
         lm.setSunAngularRadius(inst, 0.8f)
@@ -180,6 +199,8 @@ class LightManagerTest : FilamentTestFixture() {
         val inst = lm.getInstance(entity)
         assertTrue(inst != 0)
         assertEquals(LightManager.Type.SPOT, lm.getType(inst))
+        assertTrue(lm.isSpotLight(inst))
+        assertFalse(lm.isPointLight(inst))
 
         // Position
         lm.setPosition(inst, 10f, 20f, 30f)
@@ -188,14 +209,17 @@ class LightManagerTest : FilamentTestFixture() {
         assertEquals(20f, pos[1])
         assertEquals(30f, pos[2])
 
+        lm.setIntensityCandela(inst, 500f)
+        assertEquals(500f, lm.getIntensity(inst), 1e-3f)
+
         // Falloff
         lm.setFalloff(inst, 15f)
         assertTrue(lm.getFalloff(inst) > 0f)
 
         // Spot Cone
         lm.setSpotLightCone(inst, 0.1f, 0.4f)
-        assertTrue(lm.getInnerConeAngle(inst) > 0f)
-        assertTrue(lm.getOuterConeAngle(inst) > 0f)
+        assertTrue(lm.getSpotLightInnerCone(inst) > 0f)
+        assertTrue(lm.getSpotLightOuterCone(inst) > 0f)
 
         lm.destroy(entity)
         EntityManager.get().destroy(entity)

@@ -50,6 +50,7 @@ foreach(target filament-c-jni fila-jni-forwarders)
 endforeach()
 
 if (APPLE)
+    target_sources(filament-c-jni PRIVATE src/main/cpp/MetalHelper.mm)
     target_link_libraries(filament-c-jni PRIVATE
         "-framework Cocoa" "-framework Metal" "-framework QuartzCore" "-framework CoreVideo" "-framework OpenGL")
     target_link_options(filament-c-jni PRIVATE
@@ -58,14 +59,16 @@ if (APPLE)
         "LINKER:-dead_strip")
 elseif (WIN32)
     # A DLL exports only what's declared JNIEXPORT, which is exactly the seal.
-    # PlatformWGL / BlueGL need OpenGL + GDI; utils::Path needs shlwapi.
+    # PlatformWGL / BlueGL need OpenGL + GDI; utils::Path needs shlwapi. D3DHelper loads d3d12.dll itself.
+    target_sources(filament-c-jni PRIVATE src/main/cpp/D3DHelper.cpp)
     target_link_libraries(filament-c-jni PRIVATE opengl32 gdi32 user32 shlwapi)
     # Interop.cpp: D3D11 textures shared with the host through WGL_NV_DX_interop2.
     target_link_libraries(filament-c-jni PRIVATE d3d11 dxgi)
 else()
-    target_link_libraries(filament-c-jni PRIVATE GL)
+    target_sources(filament-c-jni PRIVATE src/main/cpp/GlxHelper.cpp)
+    target_link_libraries(filament-c-jni PRIVATE GL ${CMAKE_DL_LIBS})
     if (FILA_EGL_PLATFORM)
-        # Interop.cpp's host-display EGL share (see c/CMakeLists.txt).
+        # FilaInterop.cpp's host-display EGL share (see c/CMakeLists.txt).
         target_link_libraries(filament-c-jni PRIVATE EGL GLESv2)
     endif()
     target_link_options(filament-c-jni PRIVATE

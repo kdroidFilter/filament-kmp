@@ -11,4 +11,10 @@ object TestGlb {
      * exercises `GltfInstance`'s morph-weight path.
      */
     fun getAnimatedMorphCubeGlbBytes(): ByteArray = EmbeddedGlb.AnimatedMorphCube
+
+    /** Textured, so its resources upload over several frames: for tearing an asset down mid-load. */
+    fun getDuckGlbBytes(): ByteArray = EmbeddedGlb.Duck
+
+    /** Skinned, with three clips (Survey, Walk, Run): for cross-fades and blend trees. */
+    fun getFoxGlbBytes(): ByteArray = EmbeddedGlb.Fox
 }

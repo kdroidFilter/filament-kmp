@@ -31,8 +31,10 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
     if (nucleusHost != null) {
         return remember(nucleusHost) {
             Filament.init()
-            val engine = nucleusHost.createEngine()?.also { NucleusGl.bind(it, nucleusHost) }
-                ?: checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }
+            val engine = nucleusHost.createEngine()?.also { NucleusGl.bind(it, nucleusHost) } ?: run {
+                logWarn("no engine on the Nucleus GL share, falling back to a $backend engine")
+                checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }
+            }
             // The window's GL share goes with the engine created on it, not before.
             Owned(engine, emptyList()) {
                 NucleusGl.unbind(it)

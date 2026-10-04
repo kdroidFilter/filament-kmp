@@ -26,10 +26,16 @@ internal interface GpuTarget {
     val source: TextureViewSource
     val controller: TextureViewController
 
-    /** Windows: GL may only write while the D3D11 texture is locked for it. */
+    /**
+     * Windows: GL may only write while the D3D11 texture is locked for it. Linux: false while the window's GPU may
+     * still be sampling the target (see [hidden]).
+     */
     fun beforeRender(): Boolean = true
 
     fun afterRender() {}
+
+    /** The window stopped showing this target; called in its draw pass, its context current. */
+    fun hidden() {}
 }
 
 /**
@@ -87,6 +93,7 @@ internal fun NucleusTextureSurface(
         inFlight.value = null
         engine.destroy(frame.fence)
         frame.target.afterRender()
+        targets.getOrNull(shown)?.hidden()
         shown = targets.indexOf(frame.target)
         frame.target.controller.markFrameAvailable()
         SurfaceStats.surface(kind)
@@ -100,7 +107,10 @@ internal fun NucleusTextureSurface(
             // GPU still busy with the previous frame: skip rather than stall the UI thread
             if (!settle(0)) return@measure
             val next = targets.filterIndexed { i, _ -> i != shown }.first()
-            if (!next.beforeRender()) return@measure
+            if (!next.beforeRender()) {
+                SurfaceStats.targetBusy()
+                return@measure
+            }
             view.renderTarget = next.renderTarget
             renderer.renderStandaloneView(view)
             inFlight.value = InFlight(next, engine.createFence(), paused)

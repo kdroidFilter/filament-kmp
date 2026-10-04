@@ -2,6 +2,8 @@
 
 #include <filament/Engine.h>
 
+#include <cstdio>
+#include <cstring>
 #include <new>
 
 using namespace filament;
@@ -55,16 +57,21 @@ struct ScopedCurrent {
 struct FilaGpuShare {
     EGLDisplay display = EGL_NO_DISPLAY;
     EGLContext context = EGL_NO_CONTEXT;
-    EGLSurface surface = EGL_NO_SURFACE; // 1x1 pbuffer: surfaceless contexts are not universal
+    EGLSurface surface = EGL_NO_SURFACE; // 1x1 pbuffer, without EGL_KHR_surfaceless_context
     HostDisplayPlatform* platform = nullptr;
     PFNEGLCREATEIMAGEKHRPROC createImage = nullptr;
     PFNEGLDESTROYIMAGEKHRPROC destroyImage = nullptr;
+    PFNEGLCREATESYNCKHRPROC createSync = nullptr;
+    PFNEGLDESTROYSYNCKHRPROC destroySync = nullptr;
+    PFNEGLCLIENTWAITSYNCKHRPROC clientWaitSync = nullptr;
 };
 
 struct FilaGpuTexture {
     FilaGpuShare* share = nullptr;
     GLuint glName = 0;
     EGLImageKHR image = EGL_NO_IMAGE_KHR;
+    // Signals once the host's GPU is done with the frames that sampled the texture (FilaGpuTexture_release).
+    EGLSyncKHR hostReads = EGL_NO_SYNC_KHR;
 };
 
 void* FilaGpuShare_currentEglDisplay() { return eglGetCurrentDisplay(); }
@@ -78,24 +85,37 @@ FilaGpuShare* FilaGpuShare_create(void* hostEglDisplay) {
     s->display = static_cast<EGLDisplay>(hostEglDisplay);
     s->createImage = reinterpret_cast<PFNEGLCREATEIMAGEKHRPROC>(eglGetProcAddress("eglCreateImageKHR"));
     s->destroyImage = reinterpret_cast<PFNEGLDESTROYIMAGEKHRPROC>(eglGetProcAddress("eglDestroyImageKHR"));
+    s->createSync = reinterpret_cast<PFNEGLCREATESYNCKHRPROC>(eglGetProcAddress("eglCreateSyncKHR"));
+    s->destroySync = reinterpret_cast<PFNEGLDESTROYSYNCKHRPROC>(eglGetProcAddress("eglDestroySyncKHR"));
+    s->clientWaitSync = reinterpret_cast<PFNEGLCLIENTWAITSYNCKHRPROC>(eglGetProcAddress("eglClientWaitSyncKHR"));
+
+    // Surfaceless and config-less where the display allows it: Mesa's Wayland platform has no pbuffer configs.
+    char const* extensions = eglQueryString(s->display, EGL_EXTENSIONS);
+    auto const has = [extensions](char const* name) {
+        return extensions && std::strstr(extensions, name) != nullptr;
+    };
+    bool const surfaceless = has("EGL_KHR_surfaceless_context");
+    bool const noConfig = has("EGL_KHR_no_config_context") && surfaceless;
 
     EGLint const configAttribs[] = {
             EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT_KHR,
-            EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+            EGL_SURFACE_TYPE, surfaceless ? 0 : EGL_PBUFFER_BIT,
             EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8, EGL_BLUE_SIZE, 8, EGL_ALPHA_SIZE, 8,
             EGL_NONE };
     EGLint const contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
     EGLint const pbufferAttribs[] = { EGL_WIDTH, 1, EGL_HEIGHT, 1, EGL_NONE };
-    EGLConfig config = nullptr;
+    EGLConfig config = EGL_NO_CONFIG_KHR;
     EGLint count = 0;
     EGLenum const api = eglQueryAPI();
     eglBindAPI(EGL_OPENGL_ES_API);
-    if (eglChooseConfig(s->display, configAttribs, &config, 1, &count) && count == 1) {
+    if (noConfig || (eglChooseConfig(s->display, configAttribs, &config, 1, &count) && count == 1)) {
         s->context = eglCreateContext(s->display, config, EGL_NO_CONTEXT, contextAttribs);
-        s->surface = eglCreatePbufferSurface(s->display, config, pbufferAttribs);
+        if (!surfaceless) s->surface = eglCreatePbufferSurface(s->display, config, pbufferAttribs);
     }
+    EGLint const error = eglGetError();
     eglBindAPI(api);
-    if (s->context == EGL_NO_CONTEXT || s->surface == EGL_NO_SURFACE || !s->createImage || !s->destroyImage) {
+    if (s->context == EGL_NO_CONTEXT || (!surfaceless && s->surface == EGL_NO_SURFACE) || !s->createImage || !s->destroyImage) {
+        fprintf(stderr, "filament-compose: no GL share on the window's EGLDisplay (eglError 0x%x)\n", error);
         FilaGpuShare_destroy(s);
         return nullptr;
     }
@@ -148,11 +168,30 @@ FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_
 
 uint32_t FilaGpuTexture_glName(FilaGpuTexture* t) { return t ? t->glName : 0; }
 void* FilaGpuTexture_handle(FilaGpuTexture* t) { return t ? t->image : nullptr; }
-bool FilaGpuTexture_lock(FilaGpuTexture* t) { return t != nullptr; }
+bool FilaGpuTexture_lock(FilaGpuTexture* t) {
+    if (!t) return false;
+    if (t->hostReads == EGL_NO_SYNC_KHR) return true;
+    if (t->share->clientWaitSync(t->share->display, t->hostReads, 0, 0) == EGL_TIMEOUT_EXPIRED_KHR) return false;
+    t->share->destroySync(t->share->display, t->hostReads);
+    t->hostReads = EGL_NO_SYNC_KHR;
+    return true;
+}
+
 bool FilaGpuTexture_unlock(FilaGpuTexture* t) { return t != nullptr; }
+
+bool FilaGpuTexture_release(FilaGpuTexture* t) {
+    FilaGpuShare* const s = t ? t->share : nullptr;
+    if (!s || !s->createSync || !s->destroySync || !s->clientWaitSync) return false;
+    // Only the host's own context orders after its reads.
+    if (eglGetCurrentDisplay() != s->display || eglGetCurrentContext() == EGL_NO_CONTEXT) return false;
+    if (t->hostReads != EGL_NO_SYNC_KHR) s->destroySync(s->display, t->hostReads);
+    t->hostReads = s->createSync(s->display, EGL_SYNC_FENCE_KHR, nullptr);
+    return t->hostReads != EGL_NO_SYNC_KHR;
+}
 
 void FilaGpuTexture_destroy(FilaGpuTexture* t) {
     if (!t) return;
+    if (t->hostReads != EGL_NO_SYNC_KHR) t->share->destroySync(t->share->display, t->hostReads);
     if (t->image != EGL_NO_IMAGE_KHR) t->share->destroyImage(t->share->display, t->image);
     if (t->glName) {
         ScopedCurrent current(t->share->display, t->share->surface, t->share->context);
@@ -335,6 +374,8 @@ bool FilaGpuTexture_unlock(FilaGpuTexture* t) {
     return current.ok && t->share->unlockObjects(t->share->interopDevice, 1, &t->interopObject);
 }
 
+bool FilaGpuTexture_release(FilaGpuTexture*) { return false; }
+
 void FilaGpuTexture_destroy(FilaGpuTexture* t) {
     if (!t) return;
     {
@@ -358,6 +399,7 @@ uint32_t FilaGpuTexture_glName(FilaGpuTexture*) { return 0; }
 void* FilaGpuTexture_handle(FilaGpuTexture*) { return nullptr; }
 bool FilaGpuTexture_lock(FilaGpuTexture*) { return false; }
 bool FilaGpuTexture_unlock(FilaGpuTexture*) { return false; }
+bool FilaGpuTexture_release(FilaGpuTexture*) { return false; }
 void FilaGpuTexture_destroy(FilaGpuTexture*) {}
 
 #endif

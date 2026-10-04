@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-10-04
+
 ### Changed
 - **Nucleus GL windows share one engine across their views**: each `rememberFilamentEngine()` in a window takes a reference to the window's engine, kept 10 s after its last user, instead of creating its own. A screen bringing back several 3D views (a tab switch) no longer creates and destroys one engine per view on the UI thread (~35 ms + ~30 ms each). Needs Nucleus's identity-stable `rememberTaoGpuRenderContext()`; with an older Nucleus, each view keeps its own engine as before.
 
@@ -572,7 +574,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.2...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.3...HEAD
+[0.7.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.2...0.7.3
 [0.7.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.1...0.7.2
 [0.7.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.4...0.7.1
 [0.7.0]: https://github.com/Erkko68/filament-kmp/compare/0.6.0...0.7.0

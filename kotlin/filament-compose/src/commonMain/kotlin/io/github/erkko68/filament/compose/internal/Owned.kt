@@ -20,6 +20,11 @@ internal class Owned<T>(val value: T, dependsOn: List<Any?>, private val destroy
         if (value != null) registry.getOrPut(value) { ArrayList() } += this
     }
 
+    /** One more owner: [release] destroys it only once every owner has let go. */
+    fun retain() {
+        refs++
+    }
+
     fun release() {
         if (--refs > 0 || value == null) return
         val owners = registry.getValue(value)

@@ -13,6 +13,9 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Changed
+- **Nucleus GL windows share one engine across their views**: each `rememberFilamentEngine()` in a window takes a reference to the window's engine, kept 10 s after its last user, instead of creating its own. A screen bringing back several 3D views (a tab switch) no longer creates and destroys one engine per view on the UI thread (~35 ms + ~30 ms each). Needs Nucleus's identity-stable `rememberTaoGpuRenderContext()`; with an older Nucleus, each view keeps its own engine as before.
+
 ## [0.7.2] — 2026-10-04
 
 ### Fixed

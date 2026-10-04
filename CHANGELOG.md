@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-10-04
+
 ### Added
 - **`rememberFilamentEngineAsync()`**: like `rememberFilamentEngine()`, but null until the engine is ready, so the caller shows a placeholder instead of blocking the UI. In Nucleus GL windows the GPU driver is initialized on Filament's own thread (the async `Engine.Builder.build`); elsewhere the engine is created right away.
 - **`Engine.Builder.nativeObject`** (`@InternalFilamentApi`), for platform integrations configuring the native builder directly.
@@ -586,7 +588,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.4...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.5...HEAD
+[0.7.5]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.4...0.7.5
 [0.7.4]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.3...0.7.4
 [0.7.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.2...0.7.3
 [0.7.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.1...0.7.2

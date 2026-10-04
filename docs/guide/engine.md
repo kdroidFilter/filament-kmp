@@ -18,9 +18,9 @@ Use this path when you are:
 ```kotlin
 // build.gradle.kts — no Compose plugin required
 commonMain.dependencies {
-    implementation("dev.nucleusframework.filament:filament:0.7.1")
-    implementation("dev.nucleusframework.filament:gltfio:0.7.1")        // optional
-    implementation("dev.nucleusframework.filament:filament-utils:0.7.1") // optional
+    implementation("dev.nucleusframework.filament:filament:0.7.2")
+    implementation("dev.nucleusframework.filament:gltfio:0.7.2")        // optional
+    implementation("dev.nucleusframework.filament:filament-utils:0.7.2") // optional
 }
 ```
 

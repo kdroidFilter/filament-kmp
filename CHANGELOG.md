@@ -13,6 +13,9 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Idle scenes no longer render every vsync**: `GltfInstance` (without an `animationState`), `DirectionalLight` and friends (without `followGroupRotation` under a parent) and `CameraNode` (without a parent) ran an `OnFrame` loop that did nothing, which kept the window redrawing at the display rate — measured ~340 frames/s and constant GPU use for an idle window with two glTF models. They now only run it when they have per-frame work.
+
 ## [0.7.3] — 2026-10-04
 
 ### Changed

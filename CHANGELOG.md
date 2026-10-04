@@ -13,6 +13,13 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Added
+- **`rememberFilamentEngineAsync()`**: like `rememberFilamentEngine()`, but null until the engine is ready, so the caller shows a placeholder instead of blocking the UI. In Nucleus GL windows the GPU driver is initialized on Filament's own thread (the async `Engine.Builder.build`); elsewhere the engine is created right away.
+- **`Engine.Builder.nativeObject`** (`@InternalFilamentApi`), for platform integrations configuring the native builder directly.
+
+### Fixed
+- **GraalVM native image: the desktop runtime's resources are registered**, so `FilamentLoader` reads the packaged `.sha256` instead of hashing the 15 MB library on every launch (~60 ms on the UI thread).
+
 ## [0.7.4] — 2026-10-04
 
 ### Fixed

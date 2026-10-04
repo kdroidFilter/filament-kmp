@@ -2,13 +2,17 @@ package io.github.erkko68.filament.compose.internal
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.RememberObserver
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.awt.LocalAwtWindow
 import dev.nucleusframework.window.tao.TaoOpenGlRenderContext
 import dev.nucleusframework.window.tao.rememberTaoGpuRenderContext
 import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.Filament
+import io.github.erkko68.filament.InternalFilamentApi
 import io.github.erkko68.filament.compose.internal.target.DesktopOs
 import io.github.erkko68.filament.compose.internal.target.GpuFrameSharing
 import io.github.erkko68.filament.compose.internal.target.d3d.D3DEngines
@@ -37,7 +41,8 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
         if (context != null) {
             // One context instance per surface (Nucleus' identity-stable contract), so one engine per surface.
             val key = context to backend
-            return remember(key) { SharedEngines.Lease(key) { nucleusGlEngine(context, backend) } }.engine
+            val lease = remember(key) { SharedEngines.Lease(key) { it.complete(nucleusGlEngine(context, backend)) } }
+            return checkNotNull(lease.entry.engine) { "the shared $backend engine was released" }
         }
     }
 
@@ -61,6 +66,26 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
 }
 
 /**
+ * In a Nucleus GL window, the engine's driver is initialized on Filament's own thread (Engine.Builder.build with a
+ * callback), so the UI keeps running meanwhile; the window's GL share is still set up here, as reading the window's
+ * EGLDisplay needs its context current. Shared like [rememberPlatformEngine]'s, but apart from them: an engine still
+ * being created can't be handed to a caller that needs one at once. Elsewhere, created right away.
+ */
+@Composable
+internal actual fun rememberPlatformEngineAsync(backend: Engine.Backend): Engine? {
+    if (nucleusGpuEnabled && (backend == Engine.Backend.DEFAULT || backend == Engine.Backend.OPENGL)) {
+        val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext
+        if (context != null) {
+            val key = AsyncKey(context, backend)
+            return remember(key) { SharedEngines.Lease(key) { nucleusGlEngineAsync(context, backend, it) } }.entry.engine
+        }
+    }
+    return rememberPlatformEngine(backend)
+}
+
+private data class AsyncKey(val context: TaoOpenGlRenderContext, val backend: Engine.Backend)
+
+/**
  * One engine per Nucleus GPU context and backend, for every view in that window: creating and destroying an engine
  * costs tens of milliseconds on the UI thread, which a screen bringing back its 3D views (a tab switch) paid once per
  * view. The engine outlives its last user by [KEEP_ALIVE_MS], so views coming back in another composition a few
@@ -70,17 +95,38 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
 private object SharedEngines {
     private const val KEEP_ALIVE_MS = 10_000L
 
-    private class Entry(val owned: Owned<Engine>) {
+    /** A shared engine, [engine] null while it is still being created. */
+    class Entry {
+        var engine: Engine? by mutableStateOf(null)
+            private set
+        private var owned: Owned<Engine>? = null
+        private var dropped = false
         var users = 0
         var release: Job? = null
+
+        fun complete(owned: Owned<Engine>) {
+            // Let go of before it was ready: nobody will use it.
+            if (dropped) return owned.release()
+            this.owned = owned
+            engine = owned.value
+        }
+
+        fun drop() {
+            dropped = true
+            engine = null
+            owned?.release()
+            owned = null
+        }
     }
 
     private val engines = HashMap<Any, Entry>()
-    private val scope by lazy { runCatching { CoroutineScope(SupervisorJob() + Dispatchers.Main) }.getOrNull() }
+
+    /** The composition thread, to come back on; null without a main dispatcher. */
+    val scope by lazy { runCatching { CoroutineScope(SupervisorJob() + Dispatchers.Main) }.getOrNull() }
 
     /** A call site's hold on the shared engine, for as long as it stays in the composition. */
-    class Lease(private val key: Any, create: () -> Owned<Engine>) : RememberObserver {
-        val engine: Engine = acquire(key, create)
+    class Lease(private val key: Any, start: (Entry) -> Unit) : RememberObserver {
+        val entry: Entry = acquire(key, start)
         private var released = false
 
         override fun onRemembered() {}
@@ -96,12 +142,12 @@ private object SharedEngines {
         }
     }
 
-    private fun acquire(key: Any, create: () -> Owned<Engine>): Engine {
-        val entry = engines.getOrPut(key) { Entry(create()) }
+    private fun acquire(key: Any, start: (Entry) -> Unit): Entry {
+        val entry = engines.getOrPut(key) { Entry().also(start) }
         entry.release?.cancel()
         entry.release = null
         entry.users++
-        return entry.owned.value
+        return entry
     }
 
     private fun release(key: Any) {
@@ -109,7 +155,7 @@ private object SharedEngines {
         if (--entry.users > 0) return
         val drop = {
             engines.remove(key)
-            entry.owned.release()
+            entry.drop()
         }
         // Without a main dispatcher to come back on, it goes at once, as an unshared engine would.
         entry.release = scope?.launch {
@@ -126,12 +172,31 @@ private object SharedEngines {
 private fun nucleusGlEngine(context: TaoOpenGlRenderContext, backend: Engine.Backend): Owned<Engine> {
     Filament.init()
     val host = createNucleusGlHost(context)
-    val engine = host?.createEngine()?.also { NucleusGl.bind(it, host) } ?: run {
+    return owned(host, host?.createEngine(), backend)
+}
+
+/** [nucleusGlEngine], its driver initialized on Filament's thread; [entry] completes on the composition thread. */
+@OptIn(InternalFilamentApi::class)
+private fun nucleusGlEngineAsync(context: TaoOpenGlRenderContext, backend: Engine.Backend, entry: SharedEngines.Entry) {
+    Filament.init()
+    val host = createNucleusGlHost(context)
+    val scope = SharedEngines.scope
+    if (host == null || scope == null) return entry.complete(owned(host, host?.createEngine(), backend))
+    val builder = Engine.Builder()
+    FilaEngineBuilder_gpuShare(builder.nativeObject, host.share)
+    builder.build { token ->
+        // getEngine must run on the thread that started the build.
+        scope.launch { entry.complete(owned(host, Engine.getEngine(token), backend)) }
+    }
+}
+
+/** [engine] (bound to [host]), or a plain one when there is none; the window's GL share goes with it, not before. */
+private fun owned(host: NucleusGlHost?, engine: Engine?, backend: Engine.Backend): Owned<Engine> {
+    val bound = engine?.also { NucleusGl.bind(it, host!!) } ?: run {
         if (host != null) logWarn("no engine on the Nucleus GL share, falling back to a $backend engine")
         checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }
     }
-    // The window's GL share goes with the engine created on it, not before.
-    return Owned(engine, emptyList()) {
+    return Owned(bound, emptyList()) {
         NucleusGl.unbind(it)
         Engine.destroy(it)
         host?.close()

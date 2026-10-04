@@ -9,3 +9,7 @@ import io.github.erkko68.filament.Engine
  */
 @Composable
 internal expect fun rememberPlatformEngine(backend: Engine.Backend): Engine
+
+/** [rememberPlatformEngine], null until the engine is ready where the platform can create it off the UI thread. */
+@Composable
+internal expect fun rememberPlatformEngineAsync(backend: Engine.Backend): Engine?

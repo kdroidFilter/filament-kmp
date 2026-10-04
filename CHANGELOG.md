@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-10-04
+
 ### Fixed
 - **Idle scenes no longer render every vsync**: `GltfInstance` (without an `animationState`), `DirectionalLight` and friends (without `followGroupRotation` under a parent) and `CameraNode` (without a parent) ran an `OnFrame` loop that did nothing, which kept the window redrawing at the display rate — measured ~340 frames/s and constant GPU use for an idle window with two glTF models. They now only run it when they have per-frame work.
 
@@ -577,7 +579,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.3...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.4...HEAD
+[0.7.4]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.3...0.7.4
 [0.7.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.2...0.7.3
 [0.7.2]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.1...0.7.2
 [0.7.1]: https://github.com/kdroidFilter/filament-kmp/compare/0.6.4...0.7.1

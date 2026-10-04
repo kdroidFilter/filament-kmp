@@ -274,6 +274,10 @@ class Engine internal constructor(
         private var backend = Backend.DEFAULT
         private var sharedContext: Any? = null
 
+        /** The native builder, for interop with code configuring it through the Fila* C API directly. */
+        @InternalFilamentApi
+        val nativeObject: NativePointer get() = nativeBuilder
+
         /** Sets the rendering backend; DEFAULT lets the platform choose. */
         fun backend(backend: Backend): Builder = apply {
             this.backend = backend

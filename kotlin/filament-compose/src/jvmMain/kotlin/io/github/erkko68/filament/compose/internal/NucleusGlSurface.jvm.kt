@@ -17,7 +17,6 @@ import dev.nucleusframework.window.tao.TextureViewController
 import dev.nucleusframework.window.tao.TextureViewSource
 import dev.nucleusframework.window.tao.nucleusD3D11SharedTextureSource
 import dev.nucleusframework.window.tao.nucleusEglImageTextureSource
-import dev.nucleusframework.window.tao.rememberTaoGpuRenderContext
 import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.Filament
 import io.github.erkko68.filament.InternalFilamentApi
@@ -68,17 +67,11 @@ internal object NucleusGl {
     fun hostOf(engine: Engine): NucleusGlHost? = hosts[engine]
 }
 
-/** The window's GL sharing setup when this composable sits in a Nucleus GL surface, else null. */
-@Composable
-internal fun rememberNucleusGlHost(): NucleusGlHost? {
-    val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext ?: return null
-    // Closed by rememberPlatformEngine, with the engine created on it.
-    return remember(context) {
-        runCatching { createHost(context) }
-            .onFailure { logWarn("Nucleus GL share unavailable, falling back to readback: $it") }
-            .getOrNull()
-    }
-}
+/** The window's GL sharing setup, or null (logged) when the window's context can't share. */
+internal fun createNucleusGlHost(context: TaoOpenGlRenderContext): NucleusGlHost? =
+    runCatching { createHost(context) }
+        .onFailure { logWarn("Nucleus GL share unavailable, falling back to readback: $it") }
+        .getOrNull()
 
 private fun createHost(context: TaoOpenGlRenderContext): NucleusGlHost? {
     // The Fila* externals below live in the native library, which the engine has not loaded yet.

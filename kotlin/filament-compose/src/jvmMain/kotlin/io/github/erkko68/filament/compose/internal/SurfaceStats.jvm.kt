@@ -13,6 +13,7 @@ internal object SurfaceStats {
 
     private val frames = AtomicLong()
     private val renderNanos = AtomicLong()
+    private val busyTargets = AtomicLong()
 
     init {
         if (enabled) {
@@ -21,7 +22,8 @@ internal object SurfaceStats {
                     Thread.sleep(1000)
                     val f = frames.getAndSet(0)
                     val ns = renderNanos.getAndSet(0)
-                    println("filament-stats frames=$f renderCpuMs=${"%.2f".format(ns / 1e6)}")
+                    val busy = busyTargets.getAndSet(0)
+                    println("filament-stats frames=$f renderCpuMs=${"%.2f".format(ns / 1e6)} targetBusy=$busy")
                 }
             }, "filament-stats").apply { isDaemon = true }.start()
         }
@@ -46,6 +48,11 @@ internal object SurfaceStats {
         if (frameTimeNanos - lastFrameNanos < minFrameNanos - 2_000_000L) return false
         lastFrameNanos = frameTimeNanos
         return true
+    }
+
+    /** A frame skipped as the window's GPU was still reading its target. */
+    fun targetBusy() {
+        if (enabled) busyTargets.incrementAndGet()
     }
 
     fun frameDelivered() {

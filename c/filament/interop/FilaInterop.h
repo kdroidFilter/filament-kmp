@@ -38,10 +38,14 @@ typedef struct FilaGpuTexture FilaGpuTexture;
 FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_t height);
 uint32_t FilaGpuTexture_glName(FilaGpuTexture* texture);
 void* FilaGpuTexture_handle(FilaGpuTexture* texture);
-// Filament may only render into the texture between lock and unlock (Windows interop locking;
-// always succeeds on Linux).
+// Filament may only render into the texture between lock and unlock. Windows: interop locking. Linux: false while
+// the host's GPU may still be sampling it (see FilaGpuTexture_release), without waiting.
 bool FilaGpuTexture_lock(FilaGpuTexture* texture);
 bool FilaGpuTexture_unlock(FilaGpuTexture* texture);
+// Linux: the host stopped showing the texture; call with the host's context current, after the commands that sampled
+// it were submitted. A later lock fails until the host's GPU is done with them, as nothing else orders the host's
+// reads before Filament's next writes (another context). False when no fence could be inserted; no-op elsewhere.
+bool FilaGpuTexture_release(FilaGpuTexture* texture);
 void FilaGpuTexture_destroy(FilaGpuTexture* texture);
 
 // macOS: an RGBA8 render-target id<MTLTexture> on the host's device (the host samples it in place),

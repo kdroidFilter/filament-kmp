@@ -21,6 +21,7 @@ internal external fun FilaGpuTexture_glName(texture: NativePointer): Int
 internal external fun FilaGpuTexture_handle(texture: NativePointer): NativePointer
 internal external fun FilaGpuTexture_lock(texture: NativePointer): Boolean
 internal external fun FilaGpuTexture_unlock(texture: NativePointer): Boolean
+internal external fun FilaGpuTexture_release(texture: NativePointer): Boolean
 internal external fun FilaGpuTexture_destroy(texture: NativePointer)
 
 internal external fun FilaMetalTexture_create(mtlDevice: NativePointer, width: Int, height: Int): NativePointer

@@ -19,6 +19,7 @@ import dev.nucleusframework.window.tao.nucleusD3D11SharedTextureSource
 import dev.nucleusframework.window.tao.nucleusEglImageTextureSource
 import dev.nucleusframework.window.tao.rememberTaoGpuRenderContext
 import io.github.erkko68.filament.Engine
+import io.github.erkko68.filament.Filament
 import io.github.erkko68.filament.InternalFilamentApi
 import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Renderer
@@ -72,13 +73,24 @@ internal object NucleusGl {
 internal fun rememberNucleusGlHost(): NucleusGlHost? {
     val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext ?: return null
     // Closed by rememberPlatformEngine, with the engine created on it.
-    return remember(context) { runCatching { createHost(context) }.getOrNull() }
+    return remember(context) {
+        runCatching { createHost(context) }
+            .onFailure { logWarn("Nucleus GL share unavailable, falling back to readback: $it") }
+            .getOrNull()
+    }
 }
 
 private fun createHost(context: TaoOpenGlRenderContext): NucleusGlHost? {
+    // The Fila* externals below live in the native library, which the engine has not loaded yet.
+    Filament.init()
     val linux = System.getProperty("os.name").lowercase().contains("linux")
     // Linux shares the window's EGLDisplay, only readable while its context is current.
-    val display = if (linux) context.withContextCurrent { FilaGpuShare_currentEglDisplay() } ?: return null else 0L
+    val display = if (linux) context.withContextCurrent { FilaGpuShare_currentEglDisplay() } ?: 0L else 0L
+    if (linux && display == 0L) {
+        logWarn("Nucleus GL share unavailable: the window's EGLDisplay could not be read")
+        return null
+    }
+    // Logs its own reason when it fails.
     val share = FilaGpuShare_create(display)
     return if (share == 0L) null else NucleusGlHost(share, eglImages = linux)
 }
@@ -149,6 +161,7 @@ private class GlTarget(engine: Engine, host: NucleusGlHost, size: IntSize) : Gpu
 
     override fun beforeRender(): Boolean = FilaGpuTexture_lock(texture)
     override fun afterRender() { FilaGpuTexture_unlock(texture) }
+    override fun hidden() { FilaGpuTexture_release(texture) }
 
     fun destroy(engine: Engine) {
         target.destroy(engine)

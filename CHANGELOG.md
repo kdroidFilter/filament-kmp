@@ -13,6 +13,12 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Linux: destroying an engine no longer breaks the Nucleus window.** Filament's `PlatformEGL` terminated the window's own `EGLDisplay` on engine teardown; a display set from outside now stays its owner's.
+- **Linux: the Nucleus GL path is used from the first engine** (the native library was not loaded yet), and works without pbuffer configs (Mesa on Wayland). Fallbacks to readback now log why.
+- **Linux: Filament no longer renders into a texture the window may still be sampling**: a fence from the window's context gates the next render into it.
+- **glTF models blinking as they turn**: renderables gltfio leaves with an infinite bounding box get theirs rebuilt from the vertices, so culling them no longer goes through NaNs.
+
 ## [0.7.1] — 2026-10-03
 
 Synced with upstream 0.7.0 and 0.7.1 (this fork publishes no 0.7.0): read 0.7.0's migration guide when coming from 0.6.x. Nucleus GPU surfaces, the macOS x64 runtime and the EGL Linux build are kept.

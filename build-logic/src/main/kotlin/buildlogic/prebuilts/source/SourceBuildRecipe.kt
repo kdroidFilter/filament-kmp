@@ -76,6 +76,18 @@ internal fun FilamentTarget.sourceBuildRecipe(): SourceBuildRecipe = when (this)
             "filament/backend/CMakeLists.txt" to listOf(
                 "target_link_libraries(\${TARGET} PUBLIC EGL)" to "target_link_libraries(\${TARGET} PUBLIC EGL GLESv2)",
             ),
+            // FilaInterop's platform runs on the Nucleus window's EGLDisplay (setEglDisplay), which PlatformEGL
+            // would eglTerminate when an engine goes away, killing the window's own contexts: a display set from
+            // outside stays its owner's.
+            "filament/backend/include/backend/platforms/PlatformEGL.h" to listOf(
+                "    EGLDisplay mEGLDisplay = EGL_NO_DISPLAY;\n    EGLContext mEGLContext" to
+                    "    EGLDisplay mEGLDisplay = EGL_NO_DISPLAY;\n    bool mOwnsEglDisplay = true;\n    EGLContext mEGLContext",
+            ),
+            "filament/backend/src/opengl/platforms/PlatformEGL.cpp" to listOf(
+                "    mEGLDisplay = display;\n}" to "    mEGLDisplay = display;\n    mOwnsEglDisplay = false;\n}",
+                "    eglTerminate(mEGLDisplay);\n    eglReleaseThread();" to
+                    "    if (mOwnsEglDisplay) {\n        eglTerminate(mEGLDisplay);\n    }\n    eglReleaseThread();",
+            ),
         ),
         install = true,
         egl = true,

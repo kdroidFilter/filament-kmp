@@ -86,6 +86,12 @@ abstract class BuildFromSourceTask @Inject constructor(private val exec: ExecOpe
         // Like upstream's install step: libfilamat is the combined archive (glslang, SPIRV-Tools/Cross).
         libs.firstOrNull { it.name == "libfilamat_combined.a" }?.copyTo(libDir.resolve("libfilamat.a"), overwrite = true)
         recipe.uberarchiveHeader(build, install).copyTo(outDir.resolve("include/gltfio/materials/uberarchive.h"))
+        // A patched public header changes what the libraries were built against (a class layout, say), so it
+        // must win over include/'s upstream copy too, with its directory: siblings include it by a quoted path.
+        recipe.patches.keys.filter { it.contains("/include/") && it.endsWith(".h") }.forEach { path ->
+            val dir = src.resolve(path).parentFile
+            dir.copyRecursively(outDir.resolve("include/${dir.relativeTo(src).invariantSeparatorsPath.substringAfter("/include/")}"), overwrite = true)
+        }
         if (recipe.egl) outDir.resolve("egl").writeText("")
         stamp().writeText(stampValue() + "\n")
         logger.lifecycle("[${target.id}] built ${libs.size} libraries from source")

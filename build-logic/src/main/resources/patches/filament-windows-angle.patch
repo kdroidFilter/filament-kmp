@@ -1,0 +1,390 @@
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -12,7 +12,7 @@
+ # ==================================================================================================
+ 
+ # Filament does not support MSYS2-based environment on Windows. See issue #9968.
+-if(DEFINED ENV{MSYSTEM})
++if(FALSE)
+     message(FATAL_ERROR
+         "MSYS2 Subsystem detected($ENV{MSYSTEM}). "
+         "Filament does not support MSYS2-based environment on Windows.")
+@@ -419,10 +419,15 @@
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DFILAMENT_USE_EXTERNAL_GLES3")
+ endif()
+ 
+-if (FILAMENT_SUPPORTS_EGL_ON_LINUX)
++if (FILAMENT_SUPPORTS_EGL_ON_LINUX OR FILAMENT_WINDOWS_ANGLE)
+   set(EGL TRUE)
+ endif()
+ 
++# This fork: Windows runs the GL backend on ANGLE's GLES (EGL) instead of WGL
++if (FILAMENT_WINDOWS_ANGLE)
++  add_definitions(-DFILAMENT_WINDOWS_ANGLE)
++endif()
++
+ if (WIN32)
+     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_USE_MATH_DEFINES=1")
+ endif()
+@@ -717,7 +722,7 @@
+     set(MATC_OPT_FLAGS ${MATC_OPT_FLAGS} -g)
+ endif()
+ 
+-set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p ${MATC_TARGET} ${MATC_OPT_FLAGS})
++set(MATC_BASE_FLAGS ${MATC_API_FLAGS} -p all ${MATC_OPT_FLAGS})
+ 
+ # ==================================================================================================
+ # Distribution
+--- a/filament/backend/CMakeLists.txt
++++ b/filament/backend/CMakeLists.txt
+@@ -148,7 +148,7 @@
+         elseif (FILAMENT_SUPPORTS_OSMESA)
+             list(APPEND SRCS src/opengl/platforms/PlatformOSMesa.cpp)
+         endif()
+-    elseif (WIN32)
++    elseif (WIN32 AND NOT FILAMENT_WINDOWS_ANGLE)
+         list(APPEND SRCS src/opengl/platforms/PlatformWGL.cpp)
+     endif()
+ endif()
+@@ -474,6 +474,11 @@
+     target_link_libraries(${TARGET} PUBLIC "-framework Metal -framework CoreVideo")
+ endif()
+ 
++if (WIN32 AND FILAMENT_WINDOWS_ANGLE)
++    target_include_directories(${TARGET} PUBLIC ${FILAMENT_ANGLE_INCLUDE})
++    target_link_libraries(${TARGET} PUBLIC ${FILAMENT_ANGLE_LIBS})
++endif()
++
+ if (LINUX)
+     target_link_libraries(${TARGET} PRIVATE dl)
+     if(FILAMENT_SUPPORTS_EGL_ON_LINUX)
+--- a/filament/backend/src/PlatformFactory.cpp
++++ b/filament/backend/src/PlatformFactory.cpp
+@@ -39,6 +39,10 @@
+     #include <sys/system_properties.h>
+ #endif
+ 
++#if defined(FILAMENT_SUPPORTS_OPENGL) && defined(FILAMENT_WINDOWS_ANGLE)
++    #include "backend/platforms/PlatformEGL.h"
++#endif
++
+ #if defined(FILAMENT_SUPPORTS_OPENGL) && !defined(FILAMENT_USE_EXTERNAL_GLES3)
+     #if defined(__ANDROID__)
+         #include "backend/platforms/PlatformEGLAndroid.h"
+@@ -58,7 +62,7 @@
+         #elif defined(FILAMENT_SUPPORTS_OSMESA)
+             #include "backend/platforms/PlatformOSMesa.h"
+         #endif
+-    #elif defined(WIN32)
++    #elif defined(WIN32) && !defined(FILAMENT_WINDOWS_ANGLE)
+         #include "backend/platforms/PlatformWGL.h"
+     #elif defined(__EMSCRIPTEN__)
+         #include "backend/platforms/PlatformWebGL.h"
+@@ -163,7 +167,10 @@
+     }
+     assert_invariant(*backend == Backend::OPENGL);
+     #if defined(FILAMENT_SUPPORTS_OPENGL)
+-        #if defined(FILAMENT_USE_EXTERNAL_GLES3)
++        #if defined(FILAMENT_WINDOWS_ANGLE)
++            // This fork: Windows runs the GL backend on ANGLE's EGL (D3D11)
++            return new PlatformEGL();
++        #elif defined(FILAMENT_USE_EXTERNAL_GLES3)
+             return nullptr;
+         #elif defined(__ANDROID__)
+             return new PlatformEGLAndroid();
+--- a/filament/backend/src/opengl/gl_headers.h
++++ b/filament/backend/src/opengl/gl_headers.h
+@@ -37,7 +37,7 @@
+  */
+ 
+ 
+-#if defined(__ANDROID__) || defined(FILAMENT_USE_EXTERNAL_GLES3) || defined(__EMSCRIPTEN__) || defined(FILAMENT_SUPPORTS_EGL_ON_LINUX)
++#if defined(__ANDROID__) || defined(FILAMENT_USE_EXTERNAL_GLES3) || defined(__EMSCRIPTEN__) || defined(FILAMENT_SUPPORTS_EGL_ON_LINUX) || defined(FILAMENT_WINDOWS_ANGLE)
+ 
+     #if defined(__EMSCRIPTEN__)
+     #   include <GLES3/gl3.h>
+--- a/filament/backend/include/backend/platforms/PlatformEGL.h
++++ b/filament/backend/include/backend/platforms/PlatformEGL.h
+@@ -211,6 +211,7 @@
+     EGLConfig findSwapChainConfig(uint64_t flags, bool window, bool pbuffer) const;
+ 
+     EGLDisplay mEGLDisplay = EGL_NO_DISPLAY;
++    bool mOwnsEglDisplay = true;
+     EGLContext mEGLContext = EGL_NO_CONTEXT;
+     EGLContext mEGLContextProtected = EGL_NO_CONTEXT;
+     EGLSurface mEGLDummySurface = EGL_NO_SURFACE;
+--- a/filament/backend/src/opengl/platforms/PlatformEGL.cpp
++++ b/filament/backend/src/opengl/platforms/PlatformEGL.cpp
+@@ -32,6 +32,11 @@
+ #include <EGL/eglext.h>
+ #include <EGL/eglplatform.h>
+ 
++// windows.h (through eglplatform.h on Windows) defines ERROR, a FenceStatus here
++#ifdef ERROR
++#undef ERROR
++#endif
++
+ #include <algorithm>
+ #include <initializer_list>
+ #include <new>
+@@ -124,6 +129,7 @@
+     FILAMENT_CHECK_PRECONDITION(display != EGL_NO_DISPLAY)
+         << "Must specify a valid EGL Display.";
+     mEGLDisplay = display;
++    mOwnsEglDisplay = false;
+ }
+ 
+ Driver* PlatformEGL::createDriver(void* sharedContext, const DriverConfig& driverConfig) {
+@@ -357,7 +363,9 @@
+     mEGLContext = EGL_NO_CONTEXT;
+     mEGLContextProtected = EGL_NO_CONTEXT;
+ 
+-    eglTerminate(mEGLDisplay);
++    if (mOwnsEglDisplay) {
++        eglTerminate(mEGLDisplay);
++    }
+     eglReleaseThread();
+ 
+     return nullptr;
+@@ -438,7 +446,9 @@
+     for (auto const context : additionalContexts) {
+         eglDestroyContext(mEGLDisplay, context);
+     }
+-    eglTerminate(mEGLDisplay);
++    if (mOwnsEglDisplay) {
++        eglTerminate(mEGLDisplay);
++    }
+     eglReleaseThread();
+ }
+ 
+--- a/filament/src/details/Renderer.h
++++ b/filament/src/details/Renderer.h
+@@ -17,6 +17,7 @@
+ #ifndef TNT_FILAMENT_DETAILS_RENDERER_H
+ #define TNT_FILAMENT_DETAILS_RENDERER_H
+ 
++#include "TextureCache.h"
+ #include "Allocators.h"
+ #include "BufferStuffingDetector.h"
+ #include "downcast.h"
+--- a/libs/gltfio/src/Ktx2Provider.cpp
++++ b/libs/gltfio/src/Ktx2Provider.cpp
+@@ -239,9 +239,12 @@
+ #endif
+     mKtxReader.reset(new ktxreader::Ktx2Reader(*engine, quiet));
+ 
+-    mKtxReader->requestFormat(Texture::InternalFormat::ETC2_EAC_SRGBA8);
++    // This fork: BC first, which desktop GPUs sample natively; drivers advertising ETC2 there (desktop GL's
++    // ARB_ES3_compatibility, ANGLE on D3D11) only emulate it, decompressing to RGBA or failing the upload.
++    // Mobile GPUs have no BC and still get ETC2.
+     mKtxReader->requestFormat(Texture::InternalFormat::DXT5_SRGBA);
+     mKtxReader->requestFormat(Texture::InternalFormat::DXT5_RGBA);
++    mKtxReader->requestFormat(Texture::InternalFormat::ETC2_EAC_SRGBA8);
+ 
+     // Uncompressed formats are lower priority, so they get added last.
+     mKtxReader->requestFormat(Texture::InternalFormat::SRGB8_A8);
+--- a/libs/gltfio/src/ArchiveCache.h
++++ b/libs/gltfio/src/ArchiveCache.h
+@@ -50,9 +50,16 @@
+         FeatureMap getFeatureMap(Material* material) const;
+ 
+     private:
++        // This fork: the archive stays compressed; a material's package is decompressed when it is built
++        // (Filament copies it), instead of the whole archive living as long as the cache.
++        Material* buildMaterial(size_t specIndex);
++
+         Engine& mEngine;
+         utils::FixedCapacityVector<Material*> mMaterials;
+-        uberz::ReadableArchive* mArchive = nullptr;
++        uberz::ReadableArchive* mArchive = nullptr; // specs, flags and names only: no packages
++        utils::FixedCapacityVector<uint64_t> mPackageOffsets;
++        utils::FixedCapacityVector<uint8_t> mCompressed;
++        uint64_t mDecompressedSize = 0;
+     };
+ 
+     struct ArchiveRequirements {
+--- a/libs/gltfio/src/ArchiveCache.cpp
++++ b/libs/gltfio/src/ArchiveCache.cpp
+@@ -32,6 +32,8 @@
+ 
+ #include <zstd.h>
+ 
++#include <algorithm>
++
+ #include <stddef.h>
+ #include <stdint.h>
+ #include <string.h>
+@@ -86,15 +88,63 @@
+         utils::aligned_free(basePointer);
+         return;
+     }
+-    mArchive = (ReadableArchive*) basePointer;
+-    if (!convertOffsetsToPointers(mArchive, decompSize)) {
++    auto* const full = (ReadableArchive*) basePointer;
++    if (!convertOffsetsToPointers(full, decompSize)) {
++        utils::aligned_free(basePointer);
++        return;
++    }
++
++    // This fork: keep the metadata, which comes first (specs, flags, names, then the packages), and the
++    // compressed archive; buildMaterial() decompresses it again for a package.
++    auto const* const base = reinterpret_cast<uint8_t const*>(basePointer);
++    uint64_t metadataSize = decompSize;
++    mPackageOffsets = FixedCapacityVector<uint64_t>(full->specsCount, 0);
++    for (uint64_t i = 0; i < full->specsCount; ++i) {
++        mPackageOffsets[i] = uint64_t(full->specs[i].package - base);
++        metadataSize = std::min(metadataSize, mPackageOffsets[i]);
++    }
++    auto* const metadata = (uint8_t*) utils::aligned_alloc(metadataSize, 8);
++    if (UTILS_UNLIKELY(metadata == nullptr)) {
+         utils::aligned_free(basePointer);
+-        mArchive = nullptr;
+         return;
+     }
++    memcpy(metadata, base, metadataSize);
++    auto const rebase = [&](auto* pointer) {
++        return reinterpret_cast<decltype(pointer)>(metadata + (reinterpret_cast<uint8_t const*>(pointer) - base));
++    };
++    mArchive = (ReadableArchive*) metadata;
++    mArchive->specs = rebase(full->specs);
++    for (uint64_t i = 0; i < mArchive->specsCount; ++i) {
++        ArchiveSpec& spec = mArchive->specs[i];
++        spec.flags = rebase(spec.flags);
++        for (uint64_t j = 0; j < spec.flagsCount; ++j) {
++            spec.flags[j].name = rebase(spec.flags[j].name);
++        }
++        spec.package = nullptr;
++    }
++    utils::aligned_free(basePointer);
++    mCompressed = FixedCapacityVector<uint8_t>(archiveByteCount);
++    memcpy(mCompressed.data(), archiveData, archiveByteCount);
++    mDecompressedSize = decompSize;
+     mMaterials = FixedCapacityVector<Material*>(mArchive->specsCount, nullptr);
+ }
+ 
++Material* ArchiveCache::buildMaterial(size_t specIndex) {
++    auto* const archive = (uint8_t*) utils::aligned_alloc(mDecompressedSize, 8);
++    if (UTILS_UNLIKELY(archive == nullptr)) {
++        return nullptr;
++    }
++    size_t const decompressed = ZSTD_decompress(archive, mDecompressedSize, mCompressed.data(), mCompressed.size());
++    Material* material = nullptr;
++    if (!ZSTD_isError(decompressed)) {
++        material = Material::Builder()
++                .package(archive + mPackageOffsets[specIndex], mArchive->specs[specIndex].packageByteCount)
++                .build(mEngine);
++    }
++    utils::aligned_free(archive);
++    return material;
++}
++
+ // This loops though all ubershaders and returns the first one that meets the given requirements.
+ Material* ArchiveCache::getMaterial(const ArchiveRequirements& reqs) {
+     assert_invariant(mArchive && "Please call load() before requesting any materials.");
+@@ -156,9 +206,7 @@
+ 
+         if (specIsSuitable) {
+             if (mMaterials[i] == nullptr) {
+-                mMaterials[i] = Material::Builder()
+-                    .package(spec.package, spec.packageByteCount)
+-                    .build(mEngine);
++                mMaterials[i] = buildMaterial(i);
+             }
+ 
+             return mMaterials[i];
+@@ -172,9 +220,7 @@
+     assert_invariant(!mMaterials.empty() && "Archive must have at least one material.");
+     if (!mArchive) return nullptr;
+     if (mMaterials[0] == nullptr) {
+-        mMaterials[0] = Material::Builder()
+-            .package(mArchive->specs[0].package, mArchive->specs[0].packageByteCount)
+-            .build(mEngine);
++        mMaterials[0] = buildMaterial(0);
+     }
+     return mMaterials[0];
+ }
+--- a/third_party/basisu/transcoder/basisu_transcoder.cpp
++++ b/third_party/basisu/transcoder/basisu_transcoder.cpp
+@@ -13,6 +13,7 @@
+ // See the License for the specific language governing permissions and
+ // limitations under the License.
+ 
++#include <mutex>
+ #include "basisu_transcoder.h"
+ #include "basisu_containers_impl.h"
+ 
+@@ -2107,6 +2108,19 @@
+ 
+ 	static bool g_transcoder_initialized;
+ 		
++#if BASISD_SUPPORT_XUASTC
++	// This fork: XUASTC's tables, built once by the first XUASTC decode (and the encoder's init) rather than for every
++	// KTX2 reader, as most data is ETC1S or UASTC.
++	void basisu_transcoder_init_xuastc()
++	{
++		static std::once_flag s_once;
++		std::call_once(s_once, [] {
++			astc_ldr_t::init();
++			astc_ldr_t::init_transcoding_tables();
++		});
++	}
++#endif
++
+ 	// Library global initialization. Requires ~9 milliseconds when compiled and executed natively on a Core i7 2.2 GHz.
+ 	// If this is too slow, these computed tables can easilky be moved to be compiled in.
+ 	void basisu_transcoder_init()
+@@ -2250,10 +2264,7 @@
+ #endif
+ 
+ #if BASISD_SUPPORT_XUASTC
+-		// TODO: XUASTC support macro
+-		astc_ldr_t::init();
+-		
+-		astc_ldr_t::init_transcoding_tables();
++		// This fork: XUASTC's tables (~19 MB) are built on first use, see basisu_transcoder_init_xuastc()
+ 
+ 		// Used by arith encoder/decoder
+ 		arith_fastbits_f32::init();
+@@ -27119,6 +27130,8 @@
+ 		xuastc_decomp_image_init_callback_ptr pInit_callback, void* pInit_callback_data,
+ 		xuastc_decomp_image_block_callback_ptr pBlock_callback, void* pBlock_callback_data)
+ 	{
++		basist::basisu_transcoder_init_xuastc();
++
+ 		if (comp_data_size_all < sizeof(xuastc_ldr_full_zstd_header))
+ 		{
+ 			BASISU_DEVEL_ERROR("Compressed file is too small\n");
+@@ -28023,6 +28036,8 @@
+ 		xuastc_decomp_image_init_callback_ptr pInit_callback, void* pInit_callback_data,
+ 		xuastc_decomp_image_block_callback_ptr pBlock_callback, void* pBlock_callback_data)
+ 	{
++		basist::basisu_transcoder_init_xuastc();
++
+ 		if (debug_output)
+ 			basisu::debug_printf("\n------------------- astc_ldr_t::decompress_image\n");
+ 
+--- a/third_party/basisu/transcoder/basisu_transcoder.h
++++ b/third_party/basisu/transcoder/basisu_transcoder.h
+@@ -824,6 +824,10 @@
+ 
+ 	// basisu_transcoder_init() MUST be called before a .basis file can be transcoded.
+ 	void basisu_transcoder_init();
++#if BASISD_SUPPORT_XUASTC
++	// This fork: builds XUASTC's tables, which basisu_transcoder_init() leaves to the first XUASTC decode
++	void basisu_transcoder_init_xuastc();
++#endif
+ 		
+ 	enum debug_flags_t
+ 	{
+--- a/third_party/basisu/encoder/basisu_enc.cpp
++++ b/third_party/basisu/encoder/basisu_enc.cpp
+@@ -205,6 +205,9 @@
+ 		detect_sse41();
+ 				
+ 		basist::basisu_transcoder_init();
++#if BASISD_SUPPORT_XUASTC
++		basist::basisu_transcoder_init_xuastc();
++#endif
+ 		pack_etc1_solid_color_init();
+ 		//uastc_init();
+ 		bc7enc_compress_block_init(); // must be after uastc_init()

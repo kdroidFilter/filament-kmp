@@ -35,13 +35,13 @@ import kotlinx.coroutines.launch
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
+internal actual fun rememberPlatformEngine(backend: Engine.Backend, config: Engine.Config?): Engine {
     if (nucleusGpuEnabled && (backend == Engine.Backend.DEFAULT || backend == Engine.Backend.OPENGL)) {
         val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext
         if (context != null) {
             // One context instance per surface (Nucleus' identity-stable contract), so one engine per surface.
             val key = context to backend
-            val lease = remember(key) { SharedEngines.Lease(key) { it.complete(nucleusGlEngine(context, backend)) } }
+            val lease = remember(key) { SharedEngines.Lease(key) { it.complete(nucleusGlEngine(context, backend, config)) } }
             return checkNotNull(lease.entry.engine) { "the shared $backend engine was released" }
         }
     }
@@ -53,7 +53,7 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
             GpuFrameSharing.guard("creating the Filament engine", window, null, {
                 when (DesktopOs.current) {
                     // skiko's MTLTextures are sampleable by any engine on the same (default) GPU.
-                    DesktopOs.MACOS -> checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }
+                    DesktopOs.MACOS -> checkNotNull(Engine.create(backend, config = config)) { "Failed to create a $backend Engine" }
                     DesktopOs.WINDOWS -> D3DEngines.create(backend, window)
                     DesktopOs.LINUX -> GlxEngines.create(backend, window)
                     DesktopOs.OTHER -> unavailable("no GPU-to-GPU path on ${System.getProperty("os.name")}")
@@ -61,7 +61,12 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
             }, { null })
         }
         // D3DEngines.destroy also frees the Windows engine's platform, which Filament doesn't own.
-        Owned(shared?.also(GpuFrameSharing::optIn) ?: checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }, emptyList(), D3DEngines::destroy)
+        Owned(
+            shared?.also(GpuFrameSharing::optIn)
+                ?: checkNotNull(Engine.create(backend, config = config)) { "Failed to create a $backend Engine" },
+            emptyList(),
+            D3DEngines::destroy,
+        )
     }.value
 }
 
@@ -72,15 +77,15 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend): Engine {
  * being created can't be handed to a caller that needs one at once. Elsewhere, created right away.
  */
 @Composable
-internal actual fun rememberPlatformEngineAsync(backend: Engine.Backend): Engine? {
+internal actual fun rememberPlatformEngineAsync(backend: Engine.Backend, config: Engine.Config?): Engine? {
     if (nucleusGpuEnabled && (backend == Engine.Backend.DEFAULT || backend == Engine.Backend.OPENGL)) {
         val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext
         if (context != null) {
             val key = AsyncKey(context, backend)
-            return remember(key) { SharedEngines.Lease(key) { nucleusGlEngineAsync(context, backend, it) } }.entry.engine
+            return remember(key) { SharedEngines.Lease(key) { nucleusGlEngineAsync(context, backend, config, it) } }.entry.engine
         }
     }
-    return rememberPlatformEngine(backend)
+    return rememberPlatformEngine(backend, config)
 }
 
 private data class AsyncKey(val context: TaoOpenGlRenderContext, val backend: Engine.Backend)
@@ -169,32 +174,37 @@ private object SharedEngines {
 }
 
 /** An engine on (a context shared with) the window's GL context, or a plain one when that is unavailable. */
-private fun nucleusGlEngine(context: TaoOpenGlRenderContext, backend: Engine.Backend): Owned<Engine> {
+private fun nucleusGlEngine(context: TaoOpenGlRenderContext, backend: Engine.Backend, config: Engine.Config?): Owned<Engine> {
     Filament.init()
     val host = createNucleusGlHost(context)
-    return owned(host, host?.createEngine(), backend)
+    return owned(host, host?.createEngine(config), backend, config)
 }
 
 /** [nucleusGlEngine], its driver initialized on Filament's thread; [entry] completes on the composition thread. */
 @OptIn(InternalFilamentApi::class)
-private fun nucleusGlEngineAsync(context: TaoOpenGlRenderContext, backend: Engine.Backend, entry: SharedEngines.Entry) {
+private fun nucleusGlEngineAsync(
+    context: TaoOpenGlRenderContext,
+    backend: Engine.Backend,
+    config: Engine.Config?,
+    entry: SharedEngines.Entry,
+) {
     Filament.init()
     val host = createNucleusGlHost(context)
     val scope = SharedEngines.scope
-    if (host == null || scope == null) return entry.complete(owned(host, host?.createEngine(), backend))
-    val builder = Engine.Builder()
+    if (host == null || scope == null) return entry.complete(owned(host, host?.createEngine(config), backend, config))
+    val builder = Engine.Builder().config(config)
     FilaEngineBuilder_gpuShare(builder.nativeObject, host.share)
     builder.build { token ->
         // getEngine must run on the thread that started the build.
-        scope.launch { entry.complete(owned(host, Engine.getEngine(token), backend)) }
+        scope.launch { entry.complete(owned(host, Engine.getEngine(token), backend, config)) }
     }
 }
 
 /** [engine] (bound to [host]), or a plain one when there is none; the window's GL share goes with it, not before. */
-private fun owned(host: NucleusGlHost?, engine: Engine?, backend: Engine.Backend): Owned<Engine> {
+private fun owned(host: NucleusGlHost?, engine: Engine?, backend: Engine.Backend, config: Engine.Config?): Owned<Engine> {
     val bound = engine?.also { NucleusGl.bind(it, host!!) } ?: run {
         if (host != null) logWarn("no engine on the Nucleus GL share, falling back to a $backend engine")
-        checkNotNull(Engine.create(backend)) { "Failed to create a $backend Engine" }
+        checkNotNull(Engine.create(backend, config = config)) { "Failed to create a $backend Engine" }
     }
     return Owned(bound, emptyList()) {
         NucleusGl.unbind(it)

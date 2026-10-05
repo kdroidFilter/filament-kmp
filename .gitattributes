@@ -1,0 +1,2 @@
+# Applied with git apply to Filament's LF sources: never converted to CRLF on checkout
+build-logic/src/main/resources/patches/*.patch -text

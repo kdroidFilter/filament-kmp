@@ -44,6 +44,16 @@ if (FILAMENT_PLATFORM STREQUAL "linux" AND EXISTS "${FILAMENT_LIB_DIR}/../egl")
     set_source_files_properties(filament/interop/FilaInterop.cpp PROPERTIES COMPILE_OPTIONS -fno-rtti)
 endif()
 
+# Windows: libs from this fork's ANGLE build of Filament (the source recipe writes prebuilts/<id>/angle: ANGLE's headers
+# and import libraries) run their GL backend on ANGLE's GLES, which Nucleus windows already load; FilaInterop.cpp then
+# renders on an ANGLE display of its own into D3D11 textures the window imports, without the driver's OpenGL.
+if (FILAMENT_PLATFORM STREQUAL "windows" AND EXISTS "${FILAMENT_LIB_DIR}/../angle")
+    set(FILA_EGL_PLATFORM ON)
+    set(FILA_ANGLE_DIR "${FILAMENT_LIB_DIR}/../angle")
+    target_compile_definitions(fila-filament PRIVATE FILA_EGL_PLATFORM=1)
+    target_include_directories(fila-filament PRIVATE "${FILA_ANGLE_DIR}/include")
+endif()
+
 if (FILAMENT_PLATFORM MATCHES "^ios")
     # Kotlin/Native links these plus the Filament archives (see build-logic KotlinNativeCLibs).
     foreach(module IN LISTS FILA_MODULES)

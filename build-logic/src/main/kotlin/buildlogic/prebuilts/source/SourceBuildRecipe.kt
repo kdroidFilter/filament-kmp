@@ -13,6 +13,9 @@ import java.io.File
  * @property extraTargets built after the default target (e.g. filamat, off by default on wasm)
  * @property egl         the libraries run Filament's GL backend on EGL: writes `prebuilts/<id>/egl`, which
  *                       c/CMakeLists.txt reads to build Interop.cpp's EGL share (this fork, Linux)
+ * @property patchFile   a unified diff from build-logic's resources/patches, applied with `git apply` after [patches]
+ * @property angle       the libraries run Filament's GL backend on ANGLE (this fork, Windows): the build compiles and
+ *                       links against [AngleSdk], which lands in `prebuilts/<id>/angle` for c/CMakeLists.txt
  */
 class SourceBuildRecipe(
     val hostTools: List<String> = emptyList(),
@@ -22,13 +25,16 @@ class SourceBuildRecipe(
     val extraTargets: List<String> = emptyList(),
     val emscripten: Boolean = false,
     val egl: Boolean = false,
+    val patchFile: String? = null,
+    val angle: Boolean = false,
 ) {
     /**
      * Part of the build stamp, so a cached build (CI restores the latest per target) is reused until something
      * that affects this target's recipe changes, not only filaVersion.
      */
     val fingerprint: String get() =
-        listOf(hostTools, arguments, patches.toSortedMap().toList(), install, extraTargets, emscripten, egl)
+        listOf(hostTools, arguments, patches.toSortedMap().toList(), install, extraTargets, emscripten, egl,
+            patchFile?.let { patchText(it) }, angle)
             .toString().hashCode().toUInt().toString(16)
 }
 
@@ -41,19 +47,39 @@ internal fun FilamentTarget.sourceBuildRecipe(): SourceBuildRecipe = when (this)
         extraTargets = listOf("filamat"),
         emscripten = true,
     )
-    // Mirrors upstream's build/windows/build-github.bat /MT variant (hardcoded to x64 there).
+    // Mirrors upstream's build/windows/build-github.bat /MT variant (hardcoded to x64 there), on ANGLE like windows-x64.
     FilamentTarget.WINDOWS_ARM64 -> SourceBuildRecipe(
-        arguments = listOf("-A", "ARM64", "-DUSE_STATIC_CRT=ON", "-DFILAMENT_WINDOWS_CI_BUILD=ON", "-DFILAMENT_SUPPORTS_VULKAN=ON"),
+        arguments = listOf(
+            "-A", "ARM64", "-DUSE_STATIC_CRT=ON", "-DFILAMENT_WINDOWS_CI_BUILD=ON", "-DFILAMENT_SUPPORTS_VULKAN=ON",
+            "-DFILAMENT_WINDOWS_ANGLE=ON", "-DFILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB=1",
+        ),
         patches = mapOf(
             // BlueGL's only 64-bit Windows trampoline is x64 MASM; use the portable C++ one on ARM64.
             "libs/bluegl/CMakeLists.txt" to listOf(
                 "if(NOT IS_64_BIT)" to "if(NOT IS_64_BIT OR CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
                 "if (WIN32 AND IS_64_BIT)" to "if (WIN32 AND IS_64_BIT AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
             ),
-            // Filament rejects MSYS2 shells via \$MSYSTEM, which Git Bash forwards even to MSVC builds.
-            "CMakeLists.txt" to listOf("if(DEFINED ENV{MSYSTEM})" to "if(FALSE)"),
         ),
+        // The MSYS2 check (Git Bash forwards \$MSYSTEM even to MSVC builds) goes with the patch, as on windows-x64
+        patchFile = "filament-windows-angle.patch",
         install = true,
+        angle = true,
+    )
+    // This fork: upstream's build/windows/build-github.bat /MT variant, with Filament's GL backend on ANGLE (EGL + GLES on
+    // D3D11) instead of WGL, as Nucleus windows already draw with ANGLE: filament-compose then renders without the
+    // driver's OpenGL nor its D3D11 interop (c/filament/interop/FilaInterop.cpp). The patch also keeps two large
+    // allocations out of every process: gltfio's ubershader archive stays compressed until a material is built, and
+    // basisu's XUASTC tables (~19 MB) are built by the first XUASTC decode rather than by every KTX2 reader.
+    FilamentTarget.WINDOWS_X64 -> SourceBuildRecipe(
+        arguments = listOf(
+            "-A", "x64", "-DUSE_STATIC_CRT=ON", "-DFILAMENT_WINDOWS_CI_BUILD=ON", "-DFILAMENT_SUPPORTS_VULKAN=ON",
+            "-DFILAMENT_WINDOWS_ANGLE=ON",
+            // The GL handles' arena: past it handles go to the heap, a few small views needing far less than 4 MB
+            "-DFILAMENT_OPENGL_HANDLE_ARENA_SIZE_IN_MB=1",
+        ),
+        patchFile = "filament-windows-angle.patch",
+        install = true,
+        angle = true,
     )
     // This fork: no upstream release for macOS x64 (built on an Intel runner).
     FilamentTarget.MACOS_X64 -> SourceBuildRecipe(
@@ -94,6 +120,17 @@ internal fun FilamentTarget.sourceBuildRecipe(): SourceBuildRecipe = when (this)
     )
     else -> error("$id is downloaded from upstream releases, not built from source")
 }
+
+/** build-logic's resources/patches/[name]. */
+internal fun patchText(name: String): String =
+    checkNotNull(SourceBuildRecipe::class.java.getResourceAsStream("/patches/$name")) { "patch $name not found" }
+        .use { it.readBytes().decodeToString() }
+
+/** The files [patchFile] changes, by their path in the source tree. */
+internal fun SourceBuildRecipe.patchedPaths(): List<String> =
+    patchFile?.let { patchText(it) }?.lineSequence()
+        ?.filter { it.startsWith("+++ b/") }?.map { it.removePrefix("+++ b/").trim() }?.toList()
+        .orEmpty()
 
 /** The static libraries a finished build produced, from its install tree or its build tree. */
 internal fun SourceBuildRecipe.collectLibraries(buildDir: File, installDir: File): List<File> = if (install) {

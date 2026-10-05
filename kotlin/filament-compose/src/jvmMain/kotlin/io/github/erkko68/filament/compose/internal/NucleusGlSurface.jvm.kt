@@ -34,20 +34,19 @@ import java.util.WeakHashMap
 // the window imports without a copy (FilaGpuTexture):
 //  - Linux: a GLES context on the window's EGLDisplay; textures go to Nucleus as EGLImages.
 //    Needs the EGL build of Filament (the Linux source recipe in build-logic).
-//  - Windows: a WGL context; textures alias D3D11 textures (WGL_NV_DX_interop2) that Nucleus
-//    opens by their DXGI shared handle.
+//  - Windows: GLES on an ANGLE display of Filament's own (the source recipe's ANGLE build), or with
+//    the WGL build a WGL context whose textures alias D3D11 ones (WGL_NV_DX_interop2); either way
+//    Nucleus opens the D3D11 textures by their DXGI shared handle.
 // Anything unavailable falls back to the readback path.
 
 /** A Nucleus GL window's texture-sharing setup for Filament. */
 internal class NucleusGlHost(val share: NativePointer, val eglImages: Boolean) : AutoCloseable {
 
     @OptIn(InternalFilamentApi::class)
-    fun createEngine(): Engine? {
-        val builder = FilaEngineBuilder_create()
-        FilaEngineBuilder_gpuShare(builder, share)
-        val handle = FilaEngineBuilder_build(builder)
-        FilaEngineBuilder_destroy(builder)
-        return if (handle == 0L) null else Engine(handle)
+    fun createEngine(config: Engine.Config?): Engine? {
+        val builder = Engine.Builder().config(config)
+        FilaEngineBuilder_gpuShare(builder.nativeObject, share)
+        return builder.build()
     }
 
     fun source(texture: NativePointer, size: IntSize): TextureViewSource {

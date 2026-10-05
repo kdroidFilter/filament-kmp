@@ -61,9 +61,19 @@ elseif (WIN32)
     # A DLL exports only what's declared JNIEXPORT, which is exactly the seal.
     # PlatformWGL / BlueGL need OpenGL + GDI; utils::Path needs shlwapi. D3DHelper loads d3d12.dll itself.
     target_sources(filament-c-jni PRIVATE src/main/cpp/D3DHelper.cpp)
-    target_link_libraries(filament-c-jni PRIVATE opengl32 gdi32 user32 shlwapi)
-    # Interop.cpp: D3D11 textures shared with the host through WGL_NV_DX_interop2.
+    target_link_libraries(filament-c-jni PRIVATE gdi32 user32 shlwapi)
+    # Not on the ANGLE build: opengl32 exports the GL 1.x entry points too, and would win over ANGLE's.
+    if (NOT FILA_EGL_PLATFORM)
+        target_link_libraries(filament-c-jni PRIVATE opengl32)
+    endif()
+    # Interop.cpp: D3D11 textures shared with the host (through WGL_NV_DX_interop2, or ANGLE's own device).
     target_link_libraries(filament-c-jni PRIVATE d3d11 dxgi)
+    if (FILA_EGL_PLATFORM)
+        # The ANGLE build (see c/CMakeLists.txt): delay-loaded, so the image loads without ANGLE and its first EGL
+        # call binds to the libEGL/libGLESv2 the host (Nucleus) already loaded.
+        target_link_libraries(filament-c-jni PRIVATE "${FILA_ANGLE_DIR}/libEGL.lib" "${FILA_ANGLE_DIR}/libGLESv2.lib" delayimp)
+        target_link_options(filament-c-jni PRIVATE /DELAYLOAD:libEGL.dll /DELAYLOAD:libGLESv2.dll)
+    endif()
 else()
     target_sources(filament-c-jni PRIVATE src/main/cpp/GlxHelper.cpp)
     target_link_libraries(filament-c-jni PRIVATE GL ${CMAKE_DL_LIBS})

@@ -69,7 +69,7 @@ internal fun NucleusTextureSurface(
     kind: String,
     textureModifier: Modifier = Modifier,
 ) {
-    val gate = rememberPausedFrameGate(renderingEnabled, targets)
+    val gate = rememberPausedFrameGate(renderingEnabled, framesToSettle = 1, targets)
     // Read in draw only: a change redraws, nothing recomposes
     var shown by remember(targets) { mutableIntStateOf(-1) }
     var requested by remember { mutableIntStateOf(0) }
@@ -98,7 +98,7 @@ internal fun NucleusTextureSurface(
         frame.target.controller.markFrameAvailable()
         SurfaceStats.surface(kind)
         SurfaceStats.frameDelivered()
-        gate.delivered(pausedFrame = frame.paused)
+        gate.delivered(paused = frame.paused)
         return true
     }
 

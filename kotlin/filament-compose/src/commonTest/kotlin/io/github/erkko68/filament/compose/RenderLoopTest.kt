@@ -37,46 +37,51 @@ class RenderLoopTest : ComposeTestFixture() {
         assertTrue(frames > paused, "re-enabled loop should resume")
     }
 
-    // A surface whose frames reach the screen one frame late, like the Nucleus GPU surfaces' fences.
+    // A surface with frames in flight, like the desktop targets: what reaches the screen was rendered earlier.
     @OptIn(ExperimentalTestApi::class)
     @Test
     fun pausedLoopRunsUntilAPausedFrameIsOnScreen() = runComposeUiTest {
         mainClock.autoAdvance = false
-        var enabled by mutableStateOf(true)
+        var enabled by mutableStateOf(false) // starts paused: there is no last frame to hold yet
         var targets by mutableStateOf(0)
         var frames = 0
         var gpuBusy = true
-        var inFlight: Boolean? = null // whether the frame on the GPU was rendered paused
         setContent {
-            val gate = rememberPausedFrameGate(enabled, targets)
+            val gate = rememberPausedFrameGate(enabled, framesToSettle = 2, targets)
             FilamentRenderLoop(gate.loopEnabled(enabled)) {
                 frames++
-                if (gpuBusy) return@FilamentRenderLoop
-                inFlight?.let { gate.delivered(pausedFrame = it) }
-                inFlight = !enabled
+                if (!gpuBusy) gate.delivered(paused = !enabled)
             }
         }
-        repeat(3) { mainClock.advanceTimeByFrame() }
 
-        // Paused while the GPU is busy: the last change is not on screen yet, so frames go on
-        enabled = false
+        // Nothing reaches the screen while the GPU is busy: the paused loop goes on
         repeat(5) { mainClock.advanceTimeByFrame() }
         val whileBusy = frames
-        assertTrue(whileBusy > 3, "a paused surface must keep rendering until its scene is on screen")
+        assertTrue(whileBusy >= 3, "a paused surface must keep rendering until its scene is on screen, got $whileBusy")
 
-        // Rendered paused, then delivered: the loop stops
+        // Two frames shown while paused: the loop stops
         gpuBusy = false
-        repeat(4) { mainClock.advanceTimeByFrame() }
+        repeat(5) { mainClock.advanceTimeByFrame() }
         val settled = frames
+        assertTrue(settled - whileBusy in 2..3, "the loop should stop once it has settled, ran ${settled - whileBusy} more")
         repeat(5) { mainClock.advanceTimeByFrame() }
         assertEquals(settled, frames, "once a paused frame is on screen the loop must stop")
 
-        // New targets (a resize) have shown nothing: one more round, then stop again
+        // New targets (a resize) have shown nothing: it settles again, then stops
         targets++
-        repeat(4) { mainClock.advanceTimeByFrame() }
+        repeat(6) { mainClock.advanceTimeByFrame() }
         assertTrue(frames > settled, "new targets must get the paused scene")
         val resized = frames
         repeat(5) { mainClock.advanceTimeByFrame() }
         assertEquals(resized, frames)
+
+        // Resumed, then paused again: the frames shown while rendering don't count
+        enabled = true
+        repeat(4) { mainClock.advanceTimeByFrame() }
+        enabled = false
+        mainClock.advanceTimeByFrame()
+        val paused = frames
+        repeat(6) { mainClock.advanceTimeByFrame() }
+        assertTrue(frames - paused in 1..3, "pausing again should settle again, ran ${frames - paused} more")
     }
 }

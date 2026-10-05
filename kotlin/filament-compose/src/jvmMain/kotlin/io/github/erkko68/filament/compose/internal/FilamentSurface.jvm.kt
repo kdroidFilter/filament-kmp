@@ -110,7 +110,9 @@ internal actual fun FilamentSurface(
         }
     }
 
-    FilamentRenderLoop(renderingEnabled) { frameTime ->
+    // Targets keep up to two frames in flight, so the third shown after a pause was rendered paused.
+    val gate = rememberPausedFrameGate(renderingEnabled, framesToSettle = 3, target)
+    FilamentRenderLoop(gate.loopEnabled(renderingEnabled)) { frameTime ->
         val current = target ?: return@FilamentRenderLoop
         if (!SurfaceStats.frameDue(frameTime)) return@FilamentRenderLoop
         var image: Image? = null
@@ -118,6 +120,7 @@ internal actual fun FilamentSurface(
         val frame = image ?: return@FilamentRenderLoop
         SurfaceStats.surface("readback")
         SurfaceStats.frameDelivered()
+        gate.delivered(paused = !renderingEnabled)
         previousImage.value?.close()
         previousImage.value = displayedImage
         displayedImage = frame

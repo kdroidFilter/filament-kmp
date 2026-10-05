@@ -13,6 +13,19 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.6] — 2026-10-05
+
+### Added
+- **`rememberFilamentEngine(config =)` / `rememberFilamentEngineAsync(config =)`**: an `Engine.Config` for the engine the call creates (arenas, job threads, caches), so a few small views can run on much less than the full-screen defaults. Where calls share an engine (a Nucleus GL window), the first call's applies.
+
+### Changed
+- **Windows: Filament's GL backend runs on ANGLE (EGL + GLES on D3D11)** instead of WGL, x64 and ARM64. In a Nucleus window, filament-compose renders on an ANGLE display of its own into D3D11 textures the window imports, so the process no longer loads the driver's OpenGL nor its D3D11 interop. The Windows libraries are now a source build of Filament (`build-logic/src/main/resources/patches/filament-windows-angle.patch`), linking ANGLE delay-loaded: a Windows app using the OpenGL backend needs ANGLE's `libEGL.dll`/`libGLESv2.dll` loaded (Nucleus ships them).
+- **Lighter Filament on Windows**: gltfio's ubershader archive stays compressed until a material is built (it was kept decompressed, ~11 MB), basisu's XUASTC tables (~19 MB) are built by the first XUASTC decode instead of every KTX2 reader, the GL handle arena is 1 MB (handles past it go to the heap), and the D3D11 device is created without the driver's internal threads.
+- **Maven Central releases publish without a manual step** (`automaticRelease`).
+
+### Fixed
+- **KTX2 textures on ANGLE and desktop GL**: the KTX2 transcoder asks for BC before ETC2, which those drivers only emulate (decompressing to RGBA, or failing the upload on ANGLE: textures rendered white).
+
 ### Added
 - **`rememberFilamentEngine(config =)` / `rememberFilamentEngineAsync(config =)`**: an `Engine.Config` for the engine the call creates (arenas, job threads, caches), so a few small views can run on much less than the full-screen defaults. Where calls share an engine (a Nucleus GL window), the first call's applies.
 
@@ -599,7 +612,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.5...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.6...HEAD
+[0.7.6]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.5...0.7.6
 [0.7.5]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.4...0.7.5
 [0.7.4]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.3...0.7.4
 [0.7.3]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.2...0.7.3

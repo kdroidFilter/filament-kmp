@@ -15,16 +15,25 @@ import io.github.erkko68.filament.compose.internal.rememberPlatformEngineAsync
  *
  * Creating an engine initializes its GPU driver, tens of milliseconds on the calling thread; see
  * [rememberFilamentEngineAsync] to keep that off the UI.
+ *
+ * [config] sizes the engine's memory arenas, job threads and caches (the defaults suit a full-screen scene; a few small
+ * views get by with much less). Where calls share an engine (a Nucleus GL window), the first call's applies; the
+ * Windows engine of Compose Desktop's GPU-to-GPU frame sharing keeps the defaults.
  */
 @Composable
-fun rememberFilamentEngine(backend: Engine.Backend = Engine.Backend.DEFAULT): Engine =
-    rememberPlatformEngine(backend)
+fun rememberFilamentEngine(
+    backend: Engine.Backend = Engine.Backend.DEFAULT,
+    config: Engine.Config? = null,
+): Engine = rememberPlatformEngine(backend, config)
 
 /**
  * Like [rememberFilamentEngine], without blocking the UI while the engine is created: null until it is ready, so the
  * caller shows a placeholder meanwhile. The GPU driver is initialized on Filament's own thread where the platform
  * allows it (Nucleus GL windows); elsewhere the engine is created right away, as [rememberFilamentEngine] does.
+ * [config] as for [rememberFilamentEngine].
  */
 @Composable
-fun rememberFilamentEngineAsync(backend: Engine.Backend = Engine.Backend.DEFAULT): Engine? =
-    rememberPlatformEngineAsync(backend)
+fun rememberFilamentEngineAsync(
+    backend: Engine.Backend = Engine.Backend.DEFAULT,
+    config: Engine.Config? = null,
+): Engine? = rememberPlatformEngineAsync(backend, config)

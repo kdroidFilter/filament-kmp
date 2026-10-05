@@ -20,8 +20,9 @@ enum class FilamentTarget(val id: String, val release: Pair<String, String>?) {
     // filament-compose can share a Nucleus window's EGL context (see sourceBuildRecipe).
     LINUX_X64("linux-x64", null),
     LINUX_ARM64("linux-arm64", null),
-    // /MT (static CRT): the JVM's own msvcp140.dll conflicts with /MD.
-    WINDOWS_X64("windows-x64", "windows" to "lib/x86_64/mt"),
+    // This fork: built from source to run Filament's GL backend on ANGLE, the GLES Nucleus windows draw with
+    // (see sourceBuildRecipe); /MT (static CRT) like upstream's: the JVM's own msvcp140.dll conflicts with /MD.
+    WINDOWS_X64("windows-x64", null),
     WINDOWS_ARM64("windows-arm64", null),
     ANDROID_ARM64_V8A("android-arm64-v8a", "android-native" to "filament/lib/arm64-v8a"),
     ANDROID_ARMEABI_V7A("android-armeabi-v7a", "android-native" to "filament/lib/armeabi-v7a"),

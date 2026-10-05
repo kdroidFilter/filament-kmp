@@ -24,6 +24,16 @@ object ArchiveCache {
         fetch(cacheDir, "emsdk-$version.tar.gz",
             "https://github.com/emscripten-core/emsdk/archive/refs/tags/$version.tar.gz", logger)
 
+    /** The ANGLE DLLs Nucleus ships (NucleusFramework/angle), for the Windows ANGLE build's import libraries. */
+    fun angleRelease(cacheDir: File, release: String, arch: String, logger: Logger): File =
+        fetch(cacheDir, "angle-$release-win32-$arch.zip",
+            "https://github.com/NucleusFramework/angle/releases/download/angle-$release/angle-$release-win32-$arch.zip", logger)
+
+    /** One of ANGLE's public headers at [commit] (include/[path]). */
+    fun angleHeader(cacheDir: File, commit: String, path: String, logger: Logger): File =
+        fetch(cacheDir, "angle-$commit-${path.replace('/', '-')}",
+            "https://raw.githubusercontent.com/google/angle/$commit/include/$path", logger)
+
     private fun fetch(cacheDir: File, name: String, url: String, logger: Logger): File {
         val cached = cacheDir.resolve(name)
         if (cached.exists()) {

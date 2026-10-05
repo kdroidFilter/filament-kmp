@@ -61,7 +61,8 @@ mavenPublishing {
         }
     }
 
-    publishToMavenCentral()
+    // Released as soon as Central validates the upload, without a manual step in its portal
+    publishToMavenCentral(automaticRelease = true)
     if (project.hasProperty("signingInMemoryKeyId")) {
         signAllPublications()
     }

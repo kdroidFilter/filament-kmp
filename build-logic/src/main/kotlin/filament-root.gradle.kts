@@ -40,6 +40,8 @@ FilamentTarget.entries.forEach { target ->
             workDir.set(layout.projectDirectory.dir(".gradle/filament-src"))
             cacheDir.set(archiveCache)
             emsdkDir.set(layout.projectDirectory.dir(".emsdk"))
+            angleRelease.set(providers.gradleProperty("angleRelease"))
+            angleCommit.set(providers.gradleProperty("angleCommit"))
             if (target == FilamentTarget.WASM) dependsOn(setupEmsdk)
         }
     } else {

@@ -12,6 +12,7 @@ import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.Optional
 import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 import org.gradle.process.ExecOperations
@@ -31,9 +32,13 @@ abstract class BuildFromSourceTask @Inject constructor(private val exec: ExecOpe
     @get:Internal abstract val workDir: DirectoryProperty
     @get:Internal abstract val cacheDir: DirectoryProperty
     @get:Internal abstract val emsdkDir: DirectoryProperty
+    /** NucleusFramework/angle's release and ANGLE's commit for its headers ([SourceBuildRecipe.angle] targets). */
+    @get:Input @get:Optional abstract val angleRelease: Property<String>
+    @get:Input @get:Optional abstract val angleCommit: Property<String>
 
     private fun stamp() = outputDir.get().asFile.resolve("lib/${DownloadPrebuiltsTask.STAMP}")
-    private fun stampValue() = "${filamentVersion.get()}|source|${target.get().sourceBuildRecipe().fingerprint}"
+    private fun stampValue() = "${filamentVersion.get()}|source|${target.get().sourceBuildRecipe().fingerprint}" +
+        if (target.get().sourceBuildRecipe().angle) "|angle-${angleRelease.get()}-${angleCommit.get()}" else ""
 
     @TaskAction
     fun build() {
@@ -50,6 +55,7 @@ abstract class BuildFromSourceTask @Inject constructor(private val exec: ExecOpe
             val file = src.resolve(path)
             file.writeText(replacements.fold(file.readText()) { text, (old, new) -> text.replace(old, new) })
         }
+        recipe.patchFile?.let { applyPatch(src, it) }
 
         val out = src.resolve("out")
         val common = listOf("-DCMAKE_BUILD_TYPE=Release", "-DFILAMENT_SKIP_SAMPLES=ON", "-DFILAMENT_SKIP_SDL2=ON", "-DFILAMENT_BUILD_TESTING=OFF")
@@ -71,8 +77,20 @@ abstract class BuildFromSourceTask @Inject constructor(private val exec: ExecOpe
             emptyList()
         }
         val imports = if (recipe.hostTools.isNotEmpty()) listOf("-DIMPORT_EXECUTABLES_DIR=out") else emptyList()
+        val angleSdk = out.resolve("angle-sdk")
+        val angle = if (recipe.angle) {
+            val arch = if (target == FilamentTarget.WINDOWS_ARM64) "arm64" else "x64"
+            val lib = findMsvcLib(arch)
+            AngleSdk.prepare(angleSdk, angleRelease.get(), angleCommit.get(), arch, cacheDir.get().asFile, logger) { args ->
+                exec.exec { commandLine(listOf(lib) + args) }
+            }
+            val libs = listOf("libEGL", "libGLESv2").joinToString(";") { angleSdk.resolve("$it.lib").invariantSeparatorsPath }
+            listOf("-DFILAMENT_ANGLE_LIBS=$libs", "-DFILAMENT_ANGLE_INCLUDE=${angleSdk.resolve("include").invariantSeparatorsPath}")
+        } else {
+            emptyList()
+        }
         cmake(src, "-S", src.path, "-B", build.path, "-DCMAKE_INSTALL_PREFIX=${install.path}",
-            *(common + imports + toolchain + recipe.arguments).toTypedArray())
+            *(common + imports + toolchain + recipe.arguments + angle).toTypedArray())
         // An explicit job count: a bare --parallel is an unbounded `make -j` with Makefiles, which exhausts CI
         // runners' memory within minutes.
         val jobs = Runtime.getRuntime().availableProcessors().toString()
@@ -88,13 +106,31 @@ abstract class BuildFromSourceTask @Inject constructor(private val exec: ExecOpe
         recipe.uberarchiveHeader(build, install).copyTo(outDir.resolve("include/gltfio/materials/uberarchive.h"))
         // A patched public header changes what the libraries were built against (a class layout, say), so it
         // must win over include/'s upstream copy too, with its directory: siblings include it by a quoted path.
-        recipe.patches.keys.filter { it.contains("/include/") && it.endsWith(".h") }.forEach { path ->
+        (recipe.patches.keys + recipe.patchedPaths()).filter { it.contains("/include/") && it.endsWith(".h") }.forEach { path ->
             val dir = src.resolve(path).parentFile
             dir.copyRecursively(outDir.resolve("include/${dir.relativeTo(src).invariantSeparatorsPath.substringAfter("/include/")}"), overwrite = true)
         }
         if (recipe.egl) outDir.resolve("egl").writeText("")
+        // c/CMakeLists.txt's marker for the ANGLE build, with what the C API compiles and links against
+        if (recipe.angle) angleSdk.copyRecursively(outDir.resolve("angle"), overwrite = true)
         stamp().writeText(stampValue() + "\n")
         logger.lifecycle("[${target.id}] built ${libs.size} libraries from source")
+    }
+
+    /** Applies build-logic's patches/[name] to [src], unless a previous, interrupted build already did. */
+    private fun applyPatch(src: File, name: String) {
+        val patch = temporaryDir.resolve(name).apply { writeText(patchText(name)) }
+        val applied = exec.exec {
+            workingDir(src)
+            commandLine("git", "apply", "--reverse", "--check", patch.path)
+            isIgnoreExitValue = true
+            errorOutput = java.io.OutputStream.nullOutputStream()
+        }.exitValue == 0
+        if (applied) return
+        exec.exec {
+            workingDir(src)
+            commandLine("git", "apply", "--whitespace=nowarn", patch.path)
+        }
     }
 
     private fun cmake(workingDir: File, vararg args: String) {

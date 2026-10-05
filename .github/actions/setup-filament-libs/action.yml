@@ -2,7 +2,7 @@ name: Setup Filament libs
 description: |
   Filament's static libraries (prebuilts/<id>/) for the given FilamentTarget ids, cached per filaVersion.
   A miss runs the prebuilts_<id> tasks: a download for release targets, a full source build (slow, once
-  per filaVersion) for those upstream ships none for (wasm, windows-arm64; on this fork also macos-x64 and the EGL linux-*). wasm also gets the emsdk.
+  per filaVersion) for those upstream ships none for (wasm, windows-arm64; on this fork also macos-x64, the EGL linux-* and the ANGLE windows-*). wasm also gets the emsdk.
 
 inputs:
   targets:
@@ -26,7 +26,7 @@ runs:
       uses: actions/cache/restore@v6
       with:
         path: prebuilts
-        key: filament-libs-${{ steps.plan.outputs.fila }}-${{ steps.plan.outputs.name }}-${{ hashFiles('build-logic/src/main/kotlin/buildlogic/prebuilts/**') }}
+        key: filament-libs-${{ steps.plan.outputs.fila }}-${{ steps.plan.outputs.name }}-${{ hashFiles('build-logic/src/main/kotlin/buildlogic/prebuilts/**', 'build-logic/src/main/resources/patches/**') }}
         # This fork: fall back to the latest build of these targets. A source build's stamp carries its recipe's
         # fingerprint, so only a target whose own recipe changed rebuilds (a full Filament build each).
         restore-keys: filament-libs-${{ steps.plan.outputs.fila }}-${{ steps.plan.outputs.name }}-

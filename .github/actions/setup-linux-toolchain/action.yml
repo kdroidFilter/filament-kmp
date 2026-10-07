@@ -1,0 +1,32 @@
+name: Setup Linux toolchain
+description: |
+  clang 18 and its libc++ (apt.llvm.org) as clang/clang++ on the PATH, and the GL/EGL headers. The Linux natives are
+  built on Ubuntu 22.04 so they need glibc 2.35 only, and its own clang (14) is too old for Filament.
+
+inputs:
+  extra-packages:
+    description: 'More apt packages to install'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        codename=$(lsb_release -cs)
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc > /dev/null
+        echo "deb http://apt.llvm.org/$codename/ llvm-toolchain-$codename-18 main" | sudo tee /etc/apt/sources.list.d/llvm-18.list
+        # ports.ubuntu.com (the ARM runners' only mirror) intermittently drops
+        # connections — refresh the lists and retry before giving up.
+        for i in 1 2 3; do
+          sudo apt-get update
+          sudo apt-get install -y clang-18 libc++-18-dev libc++abi-18-dev libgl-dev libegl-dev libgles-dev \
+            ${{ inputs.extra-packages }} && break
+          [ "$i" = 3 ] && exit 1
+          echo "apt attempt $i failed; retrying in 20s" && sleep 20
+        done
+        # /usr/local/bin comes first on the PATH: the builds call plain clang/clang++
+        sudo ln -sf /usr/bin/clang-18 /usr/local/bin/clang
+        sudo ln -sf /usr/bin/clang++-18 /usr/local/bin/clang++
+        clang++ --version

@@ -18,7 +18,10 @@ runs:
         targets="${{ inputs.targets }}"
         echo "fila=$(sed -n 's/^filaVersion=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
         echo "emsdk=$(sed -n 's/^emsdkVersion=//p' gradle.properties)" >> "$GITHUB_OUTPUT"
-        echo "name=${targets// /-}" >> "$GITHUB_OUTPUT"
+        name=${targets// /-}
+        # Linux libs are built on the runner: never restore ones built against another Ubuntu's glibc
+        [[ "$targets" == *linux* ]] && name="$name-ubuntu$(lsb_release -rs)"
+        echo "name=$name" >> "$GITHUB_OUTPUT"
         echo "tasks=$(printf 'prebuilts_%s ' $targets)" >> "$GITHUB_OUTPUT"
         [[ " $targets " == *" wasm "* ]] && echo "wasm=true" >> "$GITHUB_OUTPUT" || echo "wasm=false" >> "$GITHUB_OUTPUT"
     # restore/save split: a source build is saved right away, even if a later step fails.

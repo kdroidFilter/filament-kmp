@@ -13,6 +13,10 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Linux: `libfilament-c.so` loads on stock distributions**: libc++ and libc++abi are linked in (local to the library), so it no longer needs `libc++.so.1`, `libc++abi.so.1` and `libunwind.so.1`, which Ubuntu, Fedora and Arch don't install by default (Arch packages no `libunwind.so.1` at all).
+- **Linux: the natives load on Ubuntu 22.04 and other glibc 2.35 distributions**: they are built on Ubuntu 22.04 (clang 18 from apt.llvm.org) instead of 24.04, which made them require glibc 2.38.
+
 ## [0.7.6] — 2026-10-05
 
 ### Added

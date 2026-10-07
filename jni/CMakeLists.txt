@@ -82,6 +82,9 @@ else()
         target_link_libraries(filament-c-jni PRIVATE EGL GLESv2)
     endif()
     target_link_options(filament-c-jni PRIVATE
+        # LLVM's C++ runtime linked in, kept local by the seal: stock distributions ship no libc++/libc++abi (nor,
+        # on Arch, the libunwind.so.1 Ubuntu's libc++ pulls in)
+        -static-libstdc++
         "LINKER:--version-script=${seal}"
         "LINKER:--gc-sections"
         "LINKER:-z,noexecstack" # one prebuilt .S object lacks the .note.GNU-stack marker

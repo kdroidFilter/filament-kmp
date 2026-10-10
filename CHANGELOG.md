@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.8] — 2026-10-10
+
 ### Fixed
 - **Compose: scenes that rebuild meshes no longer run the process out of entities**: views rendered with `renderStandaloneView` (Nucleus GPU surfaces, `rememberRenderTargetTexture`) now run Filament's end-of-frame garbage collection, so destroyed entities are recycled; after 2^17 creations, new meshes and models stopped showing in every engine.
 
@@ -621,7 +623,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.7...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...HEAD
+[0.7.8]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.7...0.7.8
 [0.7.7]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.6...0.7.7
 [0.7.6]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.5...0.7.6
 [0.7.5]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.4...0.7.5

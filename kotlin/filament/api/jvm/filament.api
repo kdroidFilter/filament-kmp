@@ -601,6 +601,7 @@ public final class io/github/erkko68/filament/Engine$Builder {
 	public final fun config (Lio/github/erkko68/filament/Engine$Config;)Lio/github/erkko68/filament/Engine$Builder;
 	public final fun feature (Ljava/lang/String;Z)Lio/github/erkko68/filament/Engine$Builder;
 	public final fun featureLevel (Lio/github/erkko68/filament/Engine$FeatureLevel;)Lio/github/erkko68/filament/Engine$Builder;
+	public final fun getNativeObject ()J
 	public final fun paused (Z)Lio/github/erkko68/filament/Engine$Builder;
 	public final fun sharedContext (Ljava/lang/Object;)Lio/github/erkko68/filament/Engine$Builder;
 }

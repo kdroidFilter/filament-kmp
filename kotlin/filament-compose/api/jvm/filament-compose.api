@@ -39,7 +39,8 @@ public abstract interface class io/github/erkko68/filament/compose/FilamentEffec
 }
 
 public final class io/github/erkko68/filament/compose/FilamentEngineKt {
-	public static final fun rememberFilamentEngine (Lio/github/erkko68/filament/Engine$Backend;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
+	public static final fun rememberFilamentEngine (Lio/github/erkko68/filament/Engine$Backend;Lio/github/erkko68/filament/Engine$Config;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
+	public static final fun rememberFilamentEngineAsync (Lio/github/erkko68/filament/Engine$Backend;Lio/github/erkko68/filament/Engine$Config;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
 }
 
 public final class io/github/erkko68/filament/compose/FilamentScene {
@@ -132,7 +133,7 @@ public final class io/github/erkko68/filament/compose/OrbitCameraController : io
 }
 
 public final class io/github/erkko68/filament/compose/RenderTargetTextureKt {
-	public static final fun rememberRenderTargetTexture (Lio/github/erkko68/filament/compose/FilamentScene;Lio/github/erkko68/filament/compose/scene/CameraState;IILio/github/erkko68/filament/compose/scene/PostProcessing;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Texture;
+	public static final fun rememberRenderTargetTexture (Lio/github/erkko68/filament/compose/FilamentScene;Lio/github/erkko68/filament/compose/scene/CameraState;IILio/github/erkko68/filament/compose/scene/PostProcessing;ZLandroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Texture;
 }
 
 public final class io/github/erkko68/filament/compose/SceneClockKt {

@@ -4,13 +4,15 @@ import androidx.compose.runtime.*
 import io.github.erkko68.filament.Engine
 import io.github.erkko68.filament.compose.FilamentSceneScope
 import io.github.erkko68.filament.compose.LocalFilamentEngine
-import io.github.erkko68.filament.compose.noFilamentEngine
 import io.github.erkko68.filament.compose.LocalFilamentScene
-import io.github.erkko68.filament.compose.noFilamentScene
-import io.github.erkko68.filament.compose.internal.logWarn
-import io.github.erkko68.filament.compose.internal.transformMatrix
-import io.github.erkko68.filament.gltfio.FilamentAsset
 import io.github.erkko68.filament.compose.OnFrame
+import io.github.erkko68.filament.compose.internal.logWarn
+import io.github.erkko68.filament.compose.internal.rememberOwned
+import io.github.erkko68.filament.compose.internal.setParent
+import io.github.erkko68.filament.compose.internal.transformMatrix
+import io.github.erkko68.filament.compose.noFilamentEngine
+import io.github.erkko68.filament.compose.noFilamentScene
+import io.github.erkko68.filament.gltfio.FilamentAsset
 import io.github.erkko68.filament.gltfio.FilamentInstance
 
 /**
@@ -121,12 +123,12 @@ fun FilamentSceneScope.GltfInstance(
     // A hidden enclosing Group hides its whole subtree.
     val effectiveVisible = visible && LocalGroupVisible.current
 
-    val instance = remember(asset) {
-        asset.assetLoader.createInstance(asset.filamentAsset)
-            ?: if (!asset.primaryInstanceClaimed) {
-                // createInstance failed (platform limitation): fall back to the asset's built-in
-                // primary instance, but only for one GltfInstance — aliasing it under several
-                // composables would leave them fighting over one transform/animator.
+    val instance = remember(asset) { asset.assetLoader.createInstance(asset.filamentAsset) }
+        // createInstance failed (platform limitation): fall back to the asset's built-in primary instance, but
+        // only for one GltfInstance at a time — aliasing it under several composables would leave them fighting
+        // over one transform/animator. The claim is given back when this GltfInstance leaves the composition.
+        ?: rememberOwned(engine, asset, create = {
+            if (!asset.primaryInstanceClaimed) {
                 asset.primaryInstanceClaimed = true
                 asset.filamentAsset.instance
             } else {
@@ -137,7 +139,8 @@ fun FilamentSceneScope.GltfInstance(
                 )
                 null
             }
-    } ?: return
+        }) { asset.primaryInstanceClaimed = false }
+        ?: return
 
     if (!asset.isReady) return
 
@@ -173,13 +176,7 @@ fun FilamentSceneScope.GltfInstance(
     // Reparent the asset root to the surrounding Group, if any. gltfio always creates a
     // transform component on the root, so no need to create one here.
     DisposableEffect(instance, parent) {
-        if (parent != null) {
-            val tm = engine.transformManager
-            val root = instance.root
-            if (tm.hasComponent(root)) {
-                tm.setParent(tm.getInstance(root), tm.getInstance(parent))
-            }
-        }
+        engine.setParent(instance.root, parent)
         onDispose { }
     }
 
@@ -222,15 +219,18 @@ fun FilamentSceneScope.GltfInstance(
         }
     }
 
-    // Shadow-flag overrides on every renderable. null keeps the asset's authored values.
+    // Shadow-flag overrides on every renderable. null keeps the asset's authored values, remembered at the
+    // first override so that going back to null restores them.
+    val authoredShadows = remember(instance) { HashMap<Int, Pair<Boolean, Boolean>>() }
     DisposableEffect(instance, castShadows, receiveShadows) {
-        if (castShadows != null || receiveShadows != null) {
+        if (castShadows != null || receiveShadows != null || authoredShadows.isNotEmpty()) {
             val rm = engine.renderableManager
             for (entity in instance.entities) {
                 if (!rm.hasComponent(entity)) continue
                 val ri = rm.getInstance(entity)
-                if (castShadows != null) rm.setCastShadows(ri, castShadows)
-                if (receiveShadows != null) rm.setReceiveShadows(ri, receiveShadows)
+                val (cast, receive) = authoredShadows.getOrPut(entity) { rm.isShadowCaster(ri) to rm.isShadowReceiver(ri) }
+                rm.setCastShadows(ri, castShadows ?: cast)
+                rm.setReceiveShadows(ri, receiveShadows ?: receive)
             }
         }
         onDispose { }

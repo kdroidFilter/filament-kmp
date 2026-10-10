@@ -15,8 +15,40 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [0.7.8] — 2026-10-10
 
+Upstream's fixes from 0.7.2 and 0.7.3 ([Erkko68/filament-kmp](https://github.com/Erkko68/filament-kmp)), and Filament 1.77.3.
+
+### Added
+- **`rememberRenderTargetTexture(renderingEnabled = …)`** (`filament-compose`): `false` stops redrawing the texture once the current scene is in it, as on `FilamentView`.
+
+### Changed
+- **Filament 1.77.3** upstream; no API changes, and `MATERIAL_VERSION` is unchanged, so `.filamat` files keep working.
+- **`SwapChain.setFrameRate` and `isFrameRateChangeSupported` are marked `@PlatformGap` off Android**: only Android surfaces can switch the display frame rate.
+
 ### Fixed
 - **Compose: scenes that rebuild meshes no longer run the process out of entities**: views rendered with `renderStandaloneView` (Nucleus GPU surfaces, `rememberRenderTargetTexture`) now run Filament's end-of-frame garbage collection, so destroyed entities are recycled; after 2^17 creations, new meshes and models stopped showing in every engine.
+- **`Quaternion` `greaterThan` compared `x` against `y`** (`filament-utils`): it now compares component by component.
+- **A `GltfInstance` on the asset's own instance gives it back when it leaves** (`filament-compose`): the next `GltfInstance` can take it where `createInstance` is unavailable.
+- **Picking the top row of a view no longer aborts the app** (`filament-compose`): `FilamentViewState.pick` was one row off, and now ignores pixels outside the viewport.
+- **`rememberGltfAsset` reports resources it can't load** (`filament-compose`): a `.gltf` referencing a missing buffer or image calls `onError` and stays null, instead of entering the scene incomplete.
+- **Animating `IndirectLightState.intensity`/`rotation` no longer rebuilds the `IndirectLight` every frame** (`filament-compose`).
+- **Android waits for the swap chain to be destroyed before its `Surface` is released** (`filament-compose`), as Filament requires in `surfaceDestroyed`.
+- **A view given another engine no longer crashes** (`filament-compose`): its surface is rebuilt on the new engine.
+- **Web views render at the display's resolution, not `devicePixelRatio` times it** (`filament-compose`): a HiDPI screen rendered 4× or more the pixels shown, and `pick` coordinates were off by that factor.
+- **Positioned lights sit where `position` says, not twice as far** (`filament-compose`, behavior-breaking): `PointLight`/`SpotLight`/`FocusedSpotLight` applied it both to the light and to its transform.
+- **Lights in a rotated `Group` turn with it once, not twice** (`filament-compose`, behavior-breaking), and `followGroupRotation = false` now does pin the aim in world space.
+- **Reloading or removing an environment no longer draws a frame with destroyed textures** (`filament-compose`): the scene's `IndirectLight` and `Skybox` keep the textures of `rememberKTXEnvironment`/`rememberHDREnvironment` alive until they let go of them.
+- **Animating a color `SkyboxState.source` no longer rebuilds the `Skybox` every frame** (`filament-compose`).
+- **`FilamentViewState.pick` is answered on a paused view** (`filament-compose`): with `renderingEnabled = false` nothing rendered, so the result never came; the view now renders until it does.
+- **Picking stays accurate while a desktop view is being resized** (`filament-compose`): `pick` takes layout pixels, which the debounced surface doesn't match until it catches up.
+- **A `FilamentView` handed another scene lets go of the old one** (`filament-compose`): the view kept the first scene alive until it left the composition itself.
+- **`GltfInstance`'s `castShadows`/`receiveShadows` go back to the asset's flags when set to null again** (`filament-compose`), instead of keeping the last override.
+- **Web views scrolled out of sight no longer grow the engine's canvas to reach them** (`filament-compose`): it spans only what is on screen, and hidden views aren't rendered.
+- **Changing a post-processing option no longer re-bakes the view's `ColorGrading`** (`filament-compose`): only a new `colorGrade` does.
+- **Content moved out of a `Group` leaves it** (`filament-compose`): a node moved with `movableContentOf` stayed under the old group's transform.
+- **`Mesh` and the primitives change `castShadows`/`receiveShadows` in place** (`filament-compose`), instead of rebuilding the entity and running `onCreate` again.
+- **A cross-fade cut to `crossFadeDuration = 0` while paused no longer poses the model with NaNs** (`filament-compose`).
+- **Overlapping web views each show their own scene** (`filament-compose`): where two overlapped, the one drawn first showed the other's pixels.
+- **A paused view shows its scene before it stops** (`filament-compose`, Android, iOS, web; the desktop surfaces already did): with `renderingEnabled = false` a view that started paused, was resized, or had its surface rebuilt stayed blank or stale. Based on [@kdroidFilter](https://github.com/kdroidFilter)'s fork.
 
 ## [0.7.7] — 2026-10-08
 

@@ -7,6 +7,7 @@ import io.github.erkko68.filament.RenderTarget
 import io.github.erkko68.filament.Texture
 import io.github.erkko68.filament.Viewport
 import io.github.erkko68.filament.compose.internal.FilamentRenderLoop
+import io.github.erkko68.filament.compose.internal.finishStandaloneFrame
 import io.github.erkko68.filament.compose.scene.CameraState
 import io.github.erkko68.filament.compose.scene.PostProcessing
 import io.github.erkko68.filament.compose.scene.applyTo
@@ -128,7 +129,10 @@ fun rememberRenderTargetTexture(
         onDispose { cameraState.detach(camera) }
     }
 
-    FilamentRenderLoop { renderer.renderStandaloneView(view) }
+    FilamentRenderLoop {
+        renderer.renderStandaloneView(view)
+        renderer.finishStandaloneFrame()
+    }
 
     return color
 }

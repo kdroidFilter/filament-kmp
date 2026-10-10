@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import io.github.erkko68.filament.Renderer
 import kotlinx.coroutines.isActive
 
 /** Calls [onFrame] once per display refresh while [enabled]; no frame is scheduled otherwise. */
@@ -54,3 +55,11 @@ internal fun rememberPausedFrameGate(renderingEnabled: Boolean, targets: Any?): 
     SideEffect { if (renderingEnabled) gate.resume() }
     return gate
 }
+
+/**
+ * Flushes a frame rendered with [Renderer.renderStandaloneView] and runs the end-of-frame housekeeping that call leaves
+ * out. Filament only garbage-collects (`Engine::gc`) from `endFrame`/`skipFrame`: without it, destroyed entities never
+ * go back to the process-wide EntityManager, which runs out after 2^17 creations and then hands every engine null
+ * entities (new meshes and models no longer show). `skipFrame` renders nothing; it flushes, then collects.
+ */
+internal fun Renderer.finishStandaloneFrame() = skipFrame()

@@ -114,7 +114,7 @@ internal fun NucleusTextureSurface(
             view.renderTarget = next.renderTarget
             renderer.renderStandaloneView(view)
             inFlight.value = InFlight(next, engine.createFence(), paused)
-            engine.flush()
+            renderer.finishStandaloneFrame()
             settle(SYNC_WAIT_NANOS)
         }
     }

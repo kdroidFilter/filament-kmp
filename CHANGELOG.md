@@ -13,6 +13,9 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Compose: scenes that rebuild meshes no longer run the process out of entities**: views rendered with `renderStandaloneView` (Nucleus GPU surfaces, `rememberRenderTargetTexture`) now run Filament's end-of-frame garbage collection, so destroyed entities are recycled; after 2^17 creations, new meshes and models stopped showing in every engine.
+
 ## [0.7.7] — 2026-10-08
 
 ### Fixed

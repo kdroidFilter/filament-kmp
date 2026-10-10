@@ -30,7 +30,8 @@ class OutParameterTest : FilamentTestFixture() {
         cam.lookAt(0.0, 0.0, 10.0, 0.0, 0.0, 0.0)
         assertContentEquals(doubleArrayOf(0.0, 0.0, 10.0), cam.getPosition())
         assertContentEquals(floatArrayOf(0f, 1f, 0f), cam.getUpVector())
-        assertContentEquals(floatArrayOf(0f, 0f, -1f), cam.getForwardVector())
+        // + 0f folds the -0.0 this fork's Linux natives return into 0.0
+        assertContentEquals(floatArrayOf(0f, 0f, -1f), cam.getForwardVector().map { it + 0f }.toFloatArray())
         cam.setScaling(1.5, 2.5)
         cam.setShift(0.25, 0.5)
 

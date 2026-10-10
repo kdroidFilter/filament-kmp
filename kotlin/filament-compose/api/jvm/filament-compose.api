@@ -39,7 +39,8 @@ public abstract interface class io/github/erkko68/filament/compose/FilamentEffec
 }
 
 public final class io/github/erkko68/filament/compose/FilamentEngineKt {
-	public static final fun rememberFilamentEngine (Lio/github/erkko68/filament/Engine$Backend;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
+	public static final fun rememberFilamentEngine (Lio/github/erkko68/filament/Engine$Backend;Lio/github/erkko68/filament/Engine$Config;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
+	public static final fun rememberFilamentEngineAsync (Lio/github/erkko68/filament/Engine$Backend;Lio/github/erkko68/filament/Engine$Config;Landroidx/compose/runtime/Composer;II)Lio/github/erkko68/filament/Engine;
 }
 
 public final class io/github/erkko68/filament/compose/FilamentScene {

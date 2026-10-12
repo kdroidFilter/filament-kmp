@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.9] — 2026-10-12
+
 ### Fixed
 - **Compose on Windows: one Filament engine for every Nucleus window**: the engine renders on Filament's own ANGLE display into D3D11 textures any window imports, so it is now shared process-wide rather than per window; a window opening (a full-screen 3D view) no longer builds an engine and compiles every material again (a second and more of lag), nor runs a second engine beside the first on that display, which crashed in ANGLE when such windows opened and closed quickly.
 - **Compose: a Nucleus GL surface's shared texture goes after Filament is done with it** (`filament-compose`): its targets' Filament objects are destroyed, the engine flushed and waited on, and only then the GL texture, EGLImage and D3D11 texture behind them.
@@ -659,7 +661,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...HEAD
+[0.7.9]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...0.7.9
 [0.7.8]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.7...0.7.8
 [0.7.7]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.6...0.7.7
 [0.7.6]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.5...0.7.6

@@ -40,7 +40,7 @@ internal actual fun rememberPlatformEngine(backend: Engine.Backend, config: Engi
         val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext
         if (context != null) {
             // One context instance per surface (Nucleus' identity-stable contract), so one engine per surface.
-            val key = context to backend
+            val key = SyncKey(engineScope(context), backend)
             val lease = remember(key) { SharedEngines.Lease(key) { it.complete(nucleusGlEngine(context, backend, config)) } }
             return checkNotNull(lease.entry.engine) { "the shared $backend engine was released" }
         }
@@ -81,14 +81,29 @@ internal actual fun rememberPlatformEngineAsync(backend: Engine.Backend, config:
     if (nucleusGpuEnabled && (backend == Engine.Backend.DEFAULT || backend == Engine.Backend.OPENGL)) {
         val context = rememberTaoGpuRenderContext() as? TaoOpenGlRenderContext
         if (context != null) {
-            val key = AsyncKey(context, backend)
+            val key = AsyncKey(engineScope(context), backend)
             return remember(key) { SharedEngines.Lease(key) { nucleusGlEngineAsync(context, backend, config, it) } }.entry.engine
         }
     }
     return rememberPlatformEngine(backend, config)
 }
 
-private data class AsyncKey(val context: TaoOpenGlRenderContext, val backend: Engine.Backend)
+private data class SyncKey(val scope: Any, val backend: Engine.Backend)
+
+private data class AsyncKey(val scope: Any, val backend: Engine.Backend)
+
+/**
+ * What an engine is shared across. Windows: the whole process — the engine renders on Filament's own ANGLE display,
+ * the same for every window, into D3D11 textures any window imports, so one engine serves them all; a window opening
+ * (a full-screen view) then gets an engine whose materials are already compiled instead of building a new one, which
+ * cost a second and more of shader compilation each time, and engines no longer come and go beside each other on that
+ * display. Linux: the window, whose EGLDisplay the engine shares.
+ */
+private fun engineScope(context: TaoOpenGlRenderContext): Any = if (isWindows) WindowsScope else context
+
+private object WindowsScope
+
+private val isWindows = System.getProperty("os.name").orEmpty().lowercase().startsWith("windows")
 
 /**
  * One engine per Nucleus GPU context and backend, for every view in that window: creating and destroying an engine

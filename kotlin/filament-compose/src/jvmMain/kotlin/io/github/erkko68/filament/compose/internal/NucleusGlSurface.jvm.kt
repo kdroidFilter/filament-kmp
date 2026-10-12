@@ -111,7 +111,7 @@ internal fun NucleusGlFilamentSurface(
         if (pxSize.width > 0 && pxSize.height > 0) {
             runCatching { GlTarget(engine, host, pxSize) }.getOrNull()?.let { first ->
                 runCatching { listOf(first, GlTarget(engine, host, pxSize)) }
-                    .getOrElse { first.destroy(engine); emptyList() }
+                    .getOrElse { destroyGlTargets(engine, listOf(first)); emptyList() }
             } ?: emptyList()
         } else {
             emptyList()
@@ -125,7 +125,7 @@ internal fun NucleusGlFilamentSurface(
         onDispose {
             view.renderTarget = null
             engine.flushAndWait()
-            targets.forEach { it.destroy(engine) }
+            destroyGlTargets(engine, targets)
         }
     }
 
@@ -155,8 +155,21 @@ private class GlTarget(engine: Engine, host: NucleusGlHost, size: IntSize) : Gpu
     override fun afterRender() { FilaGpuTexture_unlock(texture) }
     override fun hidden() { FilaGpuTexture_release(texture) }
 
-    fun destroy(engine: Engine) {
-        target.destroy(engine)
-        FilaGpuTexture_destroy(texture)
-    }
+    /** Releases the Filament side; [destroyShared] only once the driver thread is done with it. */
+    fun destroyFilament(engine: Engine) = target.destroy(engine)
+
+    /** Deletes the shared texture (GL name, EGLImage / interop, D3D11 texture); see [destroyGlTargets]. */
+    fun destroyShared() = FilaGpuTexture_destroy(texture)
+}
+
+/**
+ * [targets] destroyed in the order the driver thread needs: Filament only queues the destruction of the imported
+ * texture and its render target, so the shared texture behind them goes after [Engine.flushAndWait] rather than
+ * while the driver thread may still use it.
+ */
+private fun destroyGlTargets(engine: Engine, targets: List<GlTarget>) {
+    if (targets.isEmpty()) return
+    targets.forEach { it.destroyFilament(engine) }
+    engine.flushAndWait()
+    targets.forEach { it.destroyShared() }
 }

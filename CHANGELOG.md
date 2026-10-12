@@ -13,6 +13,10 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Compose on Windows: one Filament engine for every Nucleus window**: the engine renders on Filament's own ANGLE display into D3D11 textures any window imports, so it is now shared process-wide rather than per window; a window opening (a full-screen 3D view) no longer builds an engine and compiles every material again (a second and more of lag), nor runs a second engine beside the first on that display, which crashed in ANGLE when such windows opened and closed quickly.
+- **Compose: a Nucleus GL surface's shared texture goes after Filament is done with it** (`filament-compose`): its targets' Filament objects are destroyed, the engine flushed and waited on, and only then the GL texture, EGLImage and D3D11 texture behind them.
+
 ## [0.7.8] — 2026-10-10
 
 Upstream's fixes from 0.7.2 and 0.7.3 ([Erkko68/filament-kmp](https://github.com/Erkko68/filament-kmp)), and Filament 1.77.3.

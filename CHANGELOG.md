@@ -13,6 +13,8 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.10] — 2026-10-18
+
 ### Fixed
 - **Compose on Windows: Nucleus windows show every frame Filament renders**: the shared D3D11 textures carry a keyed mutex, held while Filament renders into them and taken by Nucleus to copy each frame out; without it nothing ordered the two devices, and a window kept showing a texture's first frame (a model missing, a scene changed since) or garbage.
 - **Compose on Windows: a new 3D view no longer compiles its shaders again**: the programs linked on Filament's ANGLE display are cached as binaries for the process (Filament's blob cache), so a view rebuilding the same materials (a new tab) loads them instead of blocking the UI thread some 250 ms on D3DCompiler.
@@ -665,7 +667,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.10...HEAD
+[0.7.10]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...0.7.10
 [0.7.9]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...0.7.9
 [0.7.8]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.7...0.7.8
 [0.7.7]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.6...0.7.7

@@ -13,6 +13,10 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Compose on Windows: Nucleus windows show every frame Filament renders**: the shared D3D11 textures carry a keyed mutex, held while Filament renders into them and taken by Nucleus to copy each frame out; without it nothing ordered the two devices, and a window kept showing a texture's first frame (a model missing, a scene changed since) or garbage.
+- **Compose on Windows: a new 3D view no longer compiles its shaders again**: the programs linked on Filament's ANGLE display are cached as binaries for the process (Filament's blob cache), so a view rebuilding the same materials (a new tab) loads them instead of blocking the UI thread some 250 ms on D3DCompiler.
+
 ## [0.7.9] — 2026-10-12
 
 ### Fixed

@@ -206,7 +206,7 @@ void FilaGpuTexture_destroy(FilaGpuTexture* t) {
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <d3d11.h>
+#include <d3d11_4.h>
 #include <dxgi.h>
 
 #include <EGL/egl.h>
@@ -222,6 +222,12 @@ void FilaGpuTexture_destroy(FilaGpuTexture* t) {
 
 #include <backend/platforms/PlatformEGL.h>
 
+#include <deque>
+#include <mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 using filament::backend::PlatformEGL;
 
 namespace {
@@ -231,6 +237,50 @@ namespace {
 class HostDisplayPlatform final : public PlatformEGL {
 public:
     explicit HostDisplayPlatform(EGLDisplay display) noexcept { setEglDisplay(display); }
+};
+
+// The programs Filament linked on Filament's ANGLE display, for the process: a material built again (every new 3D
+// view builds its own) then loads its programs from these binaries instead of having ANGLE translate them to HLSL and
+// D3DCompiler compile them, around a hundred milliseconds a view, on the UI thread when it waits for the frame.
+// Filament keys them by material and variant; one display for the process, so one cache. Oldest out first past
+// kMaxBytes.
+class ProgramBinaryCache {
+public:
+    static ProgramBinaryCache& get() {
+        static ProgramBinaryCache cache;
+        return cache;
+    }
+
+    void insert(void const* key, size_t keySize, void const* value, size_t valueSize) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        std::string k(static_cast<char const*>(key), keySize);
+        if (mBlobs.count(k) || valueSize > kMaxBytes) return;
+        auto const* bytes = static_cast<uint8_t const*>(value);
+        mBlobs.emplace(k, std::vector<uint8_t>(bytes, bytes + valueSize));
+        mOrder.push_back(std::move(k));
+        mBytes += valueSize;
+        while (mBytes > kMaxBytes) {
+            auto const oldest = mBlobs.find(mOrder.front());
+            mBytes -= oldest->second.size();
+            mBlobs.erase(oldest);
+            mOrder.pop_front();
+        }
+    }
+
+    size_t retrieve(void const* key, size_t keySize, void* value, size_t valueSize) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        auto const it = mBlobs.find(std::string(static_cast<char const*>(key), keySize));
+        if (it == mBlobs.end()) return 0;
+        if (it->second.size() <= valueSize) std::memcpy(value, it->second.data(), it->second.size());
+        return it->second.size();
+    }
+
+private:
+    static constexpr size_t kMaxBytes = 32u << 20;
+    std::mutex mMutex;
+    std::unordered_map<std::string, std::vector<uint8_t>> mBlobs;
+    std::deque<std::string> mOrder;
+    size_t mBytes = 0;
 };
 
 // Makes the share's context current for the scope, then puts the calling thread's context back.
@@ -266,6 +316,8 @@ struct FilaGpuShare {
 struct FilaGpuTexture {
     FilaGpuShare* share = nullptr;
     ID3D11Texture2D* texture = nullptr;
+    // Orders Filament's writes and the window's reads, on another D3D11 device; see FilaGpuTexture_create
+    IDXGIKeyedMutex* mutex = nullptr;
     HANDLE sharedHandle = nullptr;
     EGLImageKHR image = EGL_NO_IMAGE_KHR;
     GLuint glName = 0;
@@ -303,8 +355,8 @@ EGLDisplay filamentDisplay() {
             display = getPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, EGL_DEFAULT_DISPLAY, displayAttribs);
             if (display == EGL_NO_DISPLAY || !eglInitialize(display, nullptr, nullptr)) return EGL_NO_DISPLAY;
         }
-        // ANGLE keeps a copy of every program it links in a cache of its own, which Filament's programs make
-        // redundant: none on this display.
+        // ANGLE keeps a copy of every program it links in a cache of its own, which Filament's (ProgramBinaryCache)
+        // makes redundant: none on this display.
         if (auto const resizeProgramCache = reinterpret_cast<PFNEGLPROGRAMCACHERESIZEANGLEPROC>(
                     eglGetProcAddress("eglProgramCacheResizeANGLE"))) {
             resizeProgramCache(display, 0, EGL_PROGRAM_CACHE_RESIZE_ANGLE);
@@ -338,6 +390,13 @@ FilaGpuShare* FilaGpuShare_create(void*) {
             d3dDevice) {
         s->device = reinterpret_cast<ID3D11Device*>(d3dDevice);
         s->device->AddRef();
+        // The textures' keyed mutexes are taken on the UI thread, on the immediate context ANGLE drives from
+        // Filament's render thread
+        ID3D11Multithread* multithread = nullptr;
+        if (SUCCEEDED(s->device->QueryInterface(__uuidof(ID3D11Multithread), reinterpret_cast<void**>(&multithread)))) {
+            multithread->SetMultithreadProtected(TRUE);
+            multithread->Release();
+        }
     }
 
     EGLint const contextAttribs[] = { EGL_CONTEXT_CLIENT_VERSION, 3, EGL_NONE };
@@ -353,6 +412,13 @@ FilaGpuShare* FilaGpuShare_create(void*) {
         return nullptr;
     }
     s->platform = new HostDisplayPlatform(s->display);
+    s->platform->setBlobFunc(
+            [](void const* key, size_t keySize, void const* value, size_t valueSize) {
+                ProgramBinaryCache::get().insert(key, keySize, value, valueSize);
+            },
+            [](void const* key, size_t keySize, void* value, size_t valueSize) {
+                return ProgramBinaryCache::get().retrieve(key, keySize, value, valueSize);
+            });
     return s;
 }
 
@@ -387,9 +453,13 @@ FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_
     desc.SampleDesc.Count = 1;
     desc.Usage = D3D11_USAGE_DEFAULT;
     desc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
-    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED; // legacy handle: the only kind Nucleus imports
+    // A legacy handle, the only kind Nucleus imports, with a keyed mutex: without one nothing orders this device's
+    // writes and the window device's reads, and the window kept showing a texture's first frame (a scene changed
+    // since, a model missing). Nucleus copies each frame out under the mutex.
+    desc.MiscFlags = D3D11_RESOURCE_MISC_SHARED_KEYEDMUTEX;
     IDXGIResource* resource = nullptr;
     if (FAILED(share->device->CreateTexture2D(&desc, nullptr, &t->texture)) ||
+            FAILED(t->texture->QueryInterface(__uuidof(IDXGIKeyedMutex), reinterpret_cast<void**>(&t->mutex))) ||
             FAILED(t->texture->QueryInterface(__uuidof(IDXGIResource), reinterpret_cast<void**>(&resource))) ||
             FAILED(resource->GetSharedHandle(&t->sharedHandle))) {
         if (resource) resource->Release();
@@ -424,9 +494,10 @@ FilaGpuTexture* FilaGpuTexture_create(FilaGpuShare* share, int32_t width, int32_
 
 uint32_t FilaGpuTexture_glName(FilaGpuTexture* t) { return t ? t->glName : 0; }
 void* FilaGpuTexture_handle(FilaGpuTexture* t) { return t ? t->sharedHandle : nullptr; }
-// The surface only shows a texture once Filament's fence for it fired, and renders into the other one.
-bool FilaGpuTexture_lock(FilaGpuTexture* t) { return t != nullptr; }
-bool FilaGpuTexture_unlock(FilaGpuTexture* t) { return t != nullptr; }
+// Held from before Filament renders into the texture until its fence fired; the window takes it to copy the frame
+// out. Not waited for: the surface skips a frame while the window copies.
+bool FilaGpuTexture_lock(FilaGpuTexture* t) { return t && t->mutex->AcquireSync(0, 0) == S_OK; }
+bool FilaGpuTexture_unlock(FilaGpuTexture* t) { return t && SUCCEEDED(t->mutex->ReleaseSync(0)); }
 bool FilaGpuTexture_release(FilaGpuTexture*) { return false; }
 
 void FilaGpuTexture_destroy(FilaGpuTexture* t) {
@@ -436,6 +507,7 @@ void FilaGpuTexture_destroy(FilaGpuTexture* t) {
         if (current.ok && t->glName) glDeleteTextures(1, &t->glName);
         if (t->image != EGL_NO_IMAGE_KHR) t->share->destroyImage(t->share->display, t->image);
     }
+    if (t->mutex) t->mutex->Release();
     if (t->texture) t->texture->Release();
     delete t;
 }

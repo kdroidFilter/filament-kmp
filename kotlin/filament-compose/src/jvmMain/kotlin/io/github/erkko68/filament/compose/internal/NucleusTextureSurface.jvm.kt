@@ -56,6 +56,11 @@ private class InFlight(val target: GpuTarget, val fence: Fence, val paused: Bool
  * its fence has fired — TextureView's contract is that the producer finished writing. Each target has its own
  * TextureView, only the shown one drawing, so switching needs no recomposition.
  *
+ * A Filament [Fence] fires when the driver thread reaches it in the command stream, not when the GPU is done, so a
+ * target's first frame is only shown after [Engine.flushAndWait]: until then its texture holds whatever the driver
+ * left in it (pure magenta on macOS), which every resize step would otherwise flash. Later frames overwrite a
+ * finished image: one the GPU is still writing at worst mixes two consecutive frames, so they keep the cheap fence.
+ *
  * The caller owns [targets] (allocation, viewport, destruction) and disposes them after this.
  */
 @Composable
@@ -75,6 +80,8 @@ internal fun NucleusTextureSurface(
     var requested by remember { mutableIntStateOf(0) }
     val rendered = remember(targets) { Ref<Int>() }
     val inFlight = remember(targets) { Ref<InFlight>() }
+    // Targets the GPU has finished writing at least once
+    val written = remember(targets) { HashSet<GpuTarget>() }
 
     DisposableEffect(targets) {
         onDispose {
@@ -92,6 +99,7 @@ internal fun NucleusTextureSurface(
         if (frame.fence.wait(Fence.Mode.FLUSH, timeoutNanos) == Fence.FenceStatus.TIMEOUT_EXPIRED) return false
         inFlight.value = null
         engine.destroy(frame.fence)
+        if (written.add(frame.target)) engine.flushAndWait()
         frame.target.afterRender()
         targets.getOrNull(shown)?.hidden()
         shown = targets.indexOf(frame.target)

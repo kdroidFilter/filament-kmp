@@ -13,6 +13,11 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.11] — 2026-10-28
+
+### Fixed
+- **Compose on macOS: resizing a Nucleus 3D view no longer flashes magenta**: a Filament fence fires once the driver thread has issued a frame, not once the GPU wrote it, so each target reallocated by a resize was shown before its first frame landed — an uninitialized `MTLTexture`, pure magenta. A target's first frame now waits for the GPU (`Engine.flushAndWait`) before it is shown.
+
 ## [0.7.10] — 2026-10-18
 
 ### Fixed
@@ -667,7 +672,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.10...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.11...HEAD
+[0.7.11]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.10...0.7.11
 [0.7.10]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...0.7.10
 [0.7.9]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...0.7.9
 [0.7.8]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.7...0.7.8

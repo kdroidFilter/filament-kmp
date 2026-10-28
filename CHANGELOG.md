@@ -13,6 +13,9 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+### Fixed
+- **Compose on macOS: resizing a Nucleus 3D view no longer flashes magenta**: a Filament fence fires once the driver thread has issued a frame, not once the GPU wrote it, so each target reallocated by a resize was shown before its first frame landed — an uninitialized `MTLTexture`, pure magenta. A target's first frame now waits for the GPU (`Engine.flushAndWait`) before it is shown.
+
 ## [0.7.10] — 2026-10-18
 
 ### Fixed

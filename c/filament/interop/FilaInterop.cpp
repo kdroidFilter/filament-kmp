@@ -424,7 +424,16 @@ FilaGpuShare* FilaGpuShare_create(void*) {
 
 void FilaGpuShare_destroy(FilaGpuShare* s) {
     if (!s) return;
-    if (s->context != EGL_NO_CONTEXT) eglDestroyContext(s->display, s->context);
+    if (s->context != EGL_NO_CONTEXT) {
+        // Not with the caller's context current: ANGLE's destroyContext binds the dying context to free it, then
+        // binds the caller's back through *this* display, and the thread goes on reporting Filament's display for
+        // the window's context. The next ScopedCurrent then restores (that display, the window's context) and
+        // fails, leaving the window's frame with no context: its texture uploads are lost, so it shows wrong or
+        // missing glyphs and icons until the window's GPU cache is purged. Released first, the caller's binding
+        // is put back with its own display.
+        ScopedCurrent released(s->display, EGL_NO_CONTEXT);
+        eglDestroyContext(s->display, s->context);
+    }
     if (s->device) s->device->Release();
     delete s->platform;
     delete s;

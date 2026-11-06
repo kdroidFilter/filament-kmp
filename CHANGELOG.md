@@ -13,6 +13,11 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.12] — 2026-11-06
+
+### Fixed
+- **Compose on Windows: a Nucleus window no longer shows swapped or missing glyphs and icons after its 3D views are rebuilt**: releasing a shared engine destroyed the GL share's context on Filament's ANGLE display while the window's context was current, and ANGLE then reported Filament's display for the window's context; the next shared texture's `ScopedCurrent` could not restore the window's binding and left its frame with no context, losing Skia's texture uploads. The share's context is now destroyed with the caller's binding released and put back with its own display.
+
 ## [0.7.11] — 2026-10-28
 
 ### Fixed
@@ -672,7 +677,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.11...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.12...HEAD
+[0.7.12]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.11...0.7.12
 [0.7.11]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.10...0.7.11
 [0.7.10]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...0.7.10
 [0.7.9]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.8...0.7.9

@@ -13,6 +13,11 @@ Each entry is one line; click the version link at the bottom for the full diff.
 
 ## [Unreleased]
 
+## [0.7.13] — 2026-11-16
+
+### Fixed
+- **Desktop: a sandboxed macOS app (Mac App Store) loads Filament**: `FilamentLoader` extracted `libfilament-c` into the app's container, where the App Sandbox loads no library written at run time. A `libfilament-c` in a `java.library.path` directory (the bundle's signed copy in `Contents/Frameworks`, which Nucleus puts there) is now loaded first, before the JAR's is extracted; `filament.library.path` still comes first.
+
 ## [0.7.12] — 2026-11-06
 
 ### Fixed
@@ -677,7 +682,8 @@ Published with a misspelled qualifier. Maven Central artifacts are immutable; re
 ## [0.1.0-alpha01] — 2026-05-19
 Initial public release. Targets: Android, iOS (arm64/sim-arm64/x64), JVM (macOS/Linux/Windows), legacy Kotlin/JS. Modules: `filament`, `filament-compose`, `filament-utils`, `gltfio`, `filamat`.
 
-[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.12...HEAD
+[Unreleased]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.13...HEAD
+[0.7.13]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.12...0.7.13
 [0.7.12]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.11...0.7.12
 [0.7.11]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.10...0.7.11
 [0.7.10]: https://github.com/kdroidFilter/filament-kmp/compare/0.7.9...0.7.10

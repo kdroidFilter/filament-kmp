@@ -19,6 +19,9 @@ import java.util.function.Supplier;
  * <p>Search order:
  * <ol>
  *   <li>{@code filament.library.path} system property — load from that directory as-is.</li>
+ *   <li>A {@code java.library.path} directory holding the library — where a packaged app ships its
+ *       own, signed copy (e.g. a sandboxed macOS bundle's {@code Contents/Frameworks}, which loads
+ *       no library written at run time).</li>
  *   <li>JAR resource {@code natives/<platform>-<arch>/} — extracted once into a
  *       content-hash-keyed cache dir under {@code filament.data.path}
  *       (default {@code ~/.filament-kmp}), then reused across JVM starts. Extraction is
@@ -62,6 +65,13 @@ public final class FilamentLoader {
             return;
         }
 
+        // Second try: a copy shipped with the app, before the JAR's is extracted.
+        File shipped = findOnPath(System.getProperty("java.library.path"), libFileName);
+        if (shipped != null) {
+            loadOrCopy(shipped);
+            return;
+        }
+
         String resourcePath = "/natives/" + platformArch() + "/" + libFileName;
         if (FilamentLoader.class.getResource(resourcePath) == null) {
             // Dev fallback: allow a manually placed library on java.library.path.
@@ -74,7 +84,7 @@ public final class FilamentLoader {
             }
         }
 
-        // Second try: extract-once into a cache dir keyed by the library's content hash,
+        // Third try: extract-once into a cache dir keyed by the library's content hash,
         // so a rebuilt lib (new hash) never collides with a cached one.
         File cacheRoot = new File(System.getProperty("filament.data.path",
                 System.getProperty("user.home") + File.separator + ".filament-kmp"));
@@ -84,6 +94,17 @@ public final class FilamentLoader {
         libDir.setLastModified(System.currentTimeMillis()); // mark used, for cleanup
         loadOrCopy(lib);
         cleanupStaleCaches(cacheRoot, libDir);
+    }
+
+    /** The first directory of {@code searchPath} (a path-separator list) holding {@code libFileName}. */
+    static File findOnPath(String searchPath, String libFileName) {
+        if (searchPath == null || searchPath.isEmpty()) return null;
+        for (String dir : searchPath.split(File.pathSeparator)) {
+            if (dir.isEmpty()) continue;
+            File lib = new File(dir, libFileName);
+            if (lib.isFile()) return lib;
+        }
+        return null;
     }
 
     private static String platformArch() {

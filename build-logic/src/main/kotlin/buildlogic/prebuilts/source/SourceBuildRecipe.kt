@@ -59,6 +59,12 @@ internal fun FilamentTarget.sourceBuildRecipe(): SourceBuildRecipe = when (this)
                 "if(NOT IS_64_BIT)" to "if(NOT IS_64_BIT OR CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
                 "if (WIN32 AND IS_64_BIT)" to "if (WIN32 AND IS_64_BIT AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
             ),
+            // Without Draco, DracoMesh's destructor is defined before DracoMeshDetails is: MSVC 14.52 refuses the
+            // unique_ptr's delete of an incomplete type. Define the struct first.
+            "libs/gltfio/src/DracoCache.cpp" to listOf(
+                "struct DracoMeshDetails {};" to "",
+                "DracoMesh::~DracoMesh() {}" to "struct DracoMeshDetails {};\nDracoMesh::~DracoMesh() {}",
+            ),
         ),
         // The MSYS2 check (Git Bash forwards \$MSYSTEM even to MSVC builds) goes with the patch, as on windows-x64
         patchFile = "filament-windows-angle.patch",

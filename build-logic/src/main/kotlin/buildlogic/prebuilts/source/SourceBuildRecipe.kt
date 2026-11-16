@@ -59,9 +59,13 @@ internal fun FilamentTarget.sourceBuildRecipe(): SourceBuildRecipe = when (this)
                 "if(NOT IS_64_BIT)" to "if(NOT IS_64_BIT OR CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
                 "if (WIN32 AND IS_64_BIT)" to "if (WIN32 AND IS_64_BIT AND NOT CMAKE_GENERATOR_PLATFORM STREQUAL \"ARM64\")",
             ),
-            // Without Draco, DracoMesh's destructor is defined before DracoMeshDetails is: MSVC 14.52 refuses the
-            // unique_ptr's delete of an incomplete type. Define the struct first.
+            // Without Draco, DracoMesh's constructor and destructor are defined before DracoMeshDetails is: MSVC 14.52
+            // refuses the unique_ptr's delete of an incomplete type in both. Define the struct first, the constructor
+            // last.
             "libs/gltfio/src/DracoCache.cpp" to listOf(
+                "DracoMesh::DracoMesh(struct DracoMeshDetails* details) : mDetails(details) {}" to "",
+                "} // namespace filament::gltfio" to
+                    "DracoMesh::DracoMesh(struct DracoMeshDetails* details) : mDetails(details) {}\n\n} // namespace filament::gltfio",
                 "struct DracoMeshDetails {};" to "",
                 "DracoMesh::~DracoMesh() {}" to "struct DracoMeshDetails {};\nDracoMesh::~DracoMesh() {}",
             ),

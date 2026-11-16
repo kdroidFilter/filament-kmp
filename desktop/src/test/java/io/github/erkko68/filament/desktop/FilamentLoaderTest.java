@@ -118,4 +118,17 @@ public class FilamentLoaderTest {
         assertTrue(dir.setLastModified(System.currentTimeMillis() - TimeUnit.DAYS.toMillis(ageDays)));
         return dir;
     }
+
+    @Test
+    public void findsTheLibraryOnTheSearchPath() throws Exception {
+        File empty = tmp.newFolder("empty");
+        File frameworks = tmp.newFolder("Frameworks");
+        File lib = new File(frameworks, "libfilament-c.dylib");
+        Files.writeString(lib.toPath(), "lib");
+        String path = String.join(File.pathSeparator, "", empty.getPath(), frameworks.getPath());
+
+        assertEquals(lib, FilamentLoader.findOnPath(path, "libfilament-c.dylib"));
+        assertEquals(null, FilamentLoader.findOnPath(empty.getPath(), "libfilament-c.dylib"));
+        assertEquals(null, FilamentLoader.findOnPath(null, "libfilament-c.dylib"));
+    }
 }
